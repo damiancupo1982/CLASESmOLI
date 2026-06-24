@@ -14,6 +14,12 @@ async function ensureAuth(): Promise<void> {
   return Promise.resolve();
 }
 
+function toISO(date: Date | string | any): string {
+  if (date instanceof Date) return date.toISOString();
+  if (typeof date === 'string') return date;
+  return new Date(date).toISOString();
+}
+
 const convertDatesToISO = (obj: any): any => {
   if (obj instanceof Date) {
     return obj.toISOString();
@@ -205,7 +211,7 @@ export const firebaseService = {
       condition: student.condition,
       observations: student.observations,
       current_balance: student.currentBalance,
-      created_at: student.createdAt.toISOString()
+      created_at: toISO(student.createdAt)
     };
 
     const { error } = await supabase
@@ -218,14 +224,14 @@ export const firebaseService = {
       const entries = student.accountHistory.map(entry => ({
         id: entry.id,
         student_id: student.id,
-        date: entry.date.toISOString(),
+        date: toISO(entry.date),
         class_name: entry.className,
         class_id: entry.classId,
         attendance_status: entry.attendanceStatus,
         amount: entry.amount,
         kind: entry.kind || 'class',
         note: entry.note || '',
-        created_at: entry.createdAt.toISOString()
+        created_at: toISO(entry.createdAt)
       }));
 
       const { error: entriesError } = await supabase
@@ -310,7 +316,7 @@ export const firebaseService = {
     const dbClass = {
       id: classData.id,
       club_id: clubId,
-      date: classData.date.toISOString(),
+      date: toISO(classData.date),
       type: classData.type,
       max_students: classData.maxStudents,
       price_per_student: classData.pricePerStudent,
@@ -320,7 +326,7 @@ export const firebaseService = {
       attendances: classData.attendances,
       status: classData.status,
       parent_id: classData.parentId,
-      created_at: classData.createdAt.toISOString()
+      created_at: toISO(classData.createdAt)
     };
 
     const { error } = await supabase
@@ -401,52 +407,34 @@ export const firebaseService = {
 
   async saveTransaction(clubId: string, transaction: Transaction): Promise<void> {
     await ensureAuth();
-    const dateValue = transaction.date instanceof Date
-      ? transaction.date.toISOString()
-      : new Date(transaction.date).toISOString();
-
-    const dbTransaction: Record<string, unknown> = {
+    const dbTransaction = {
       id: transaction.id,
       club_id: clubId,
       student_id: transaction.studentId,
       student_name: transaction.studentName,
-      class_id: transaction.classId || null,
+      class_id: transaction.classId,
       class_name: transaction.className,
       type: transaction.type,
       amount: transaction.amount,
-      date: dateValue,
-      description: transaction.description || '',
+      date: toISO(transaction.date),
+      description: transaction.description,
       status: transaction.status,
-      invoice_id: transaction.invoiceId || null,
-      settlement_kind: transaction.settlementKind || null
+      invoice_id: transaction.invoiceId,
+      settlement_kind: transaction.settlementKind
     };
 
     const { error } = await supabase
       .from('transactions')
       .upsert(dbTransaction);
 
-    if (error) throw error;
+    if (error) {
+      console.error('❌ Error al guardar transacción:', error, dbTransaction);
+      throw error;
+    }
   },
 
   async updateTransaction(clubId: string, transaction: Transaction): Promise<void> {
-    await ensureAuth();
-    const dateValue = transaction.date instanceof Date
-      ? transaction.date.toISOString()
-      : new Date(transaction.date).toISOString();
-
-    const { error } = await supabase
-      .from('transactions')
-      .update({
-        status: transaction.status,
-        description: transaction.description || '',
-        amount: transaction.amount,
-        date: dateValue,
-        settlement_kind: transaction.settlementKind || null
-      })
-      .eq('id', transaction.id)
-      .eq('club_id', clubId);
-
-    if (error) throw error;
+    await this.saveTransaction(clubId, transaction);
   },
 
   async deleteTransaction(clubId: string, id: string): Promise<void> {
@@ -519,15 +507,12 @@ export const firebaseService = {
 
   async saveReceipt(clubId: string, receipt: Receipt): Promise<void> {
     await ensureAuth();
-    // Be defensive: accept Date or string and convert to ISO
-    const dateIso = receipt.date instanceof Date ? receipt.date.toISOString() : new Date(receipt.date).toISOString();
-
     const dbReceipt = {
       id: receipt.id,
       club_id: clubId,
       student_id: receipt.studentId,
       student_name: receipt.studentName,
-      date: dateIso,
+      date: toISO(receipt.date),
       transactions: receipt.transactions,
       total_amount: receipt.totalAmount,
       discount_amount: receipt.discountAmount,
@@ -582,7 +567,7 @@ export const firebaseService = {
       student_id: payment.studentId,
       amount: payment.amount,
       method: payment.method,
-      date: payment.date.toISOString(),
+      date: toISO(payment.date),
       description: payment.description,
       invoice_id: payment.invoiceId,
       transaction_ids: payment.transactionIds
@@ -626,13 +611,13 @@ export const firebaseService = {
       club_id: clubId,
       student_id: invoice.studentId,
       number: invoice.number,
-      date: invoice.date.toISOString(),
+      date: toISO(invoice.date),
       items: invoice.items,
       subtotal: invoice.subtotal,
       total: invoice.total,
       status: invoice.status,
       payment_method: invoice.paymentMethod,
-      paid_at: invoice.paidAt ? invoice.paidAt.toISOString() : null
+      paid_at: invoice.paidAt ? toISO(invoice.paidAt) : null
     };
 
     const { error } = await supabase

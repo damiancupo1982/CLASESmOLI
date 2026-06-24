@@ -281,35 +281,14 @@ function createAppReducer(clubId: string) {
 
       case 'UPDATE_TRANSACTION_STATUS': {
         const updatedTransaction = state.transactions.find(t => t.id === action.payload.id);
-        const updatedTransactions = state.transactions.map(t =>
-          t.id === action.payload.id ? { ...t, status: action.payload.status } : t
-        );
-
-        let updatedStudents = state.students;
-        if (updatedTransaction && action.payload.status === 'Pagado' && updatedTransaction.status === 'Pendiente') {
-          updatedStudents = state.students.map(s => {
-            if (s.id === updatedTransaction.studentId) {
-              const newBalance = Math.max(0, +(s.currentBalance - updatedTransaction.amount).toFixed(2));
-              return { ...s, currentBalance: newBalance };
-            }
-            return s;
-          });
-        }
-
         newState = {
           ...state,
-          transactions: updatedTransactions,
-          students: updatedStudents
+          transactions: state.transactions.map(t =>
+            t.id === action.payload.id ? { ...t, status: action.payload.status } : t
+          )
         };
-
         if (updatedTransaction) {
           firebaseService.updateTransaction({ ...updatedTransaction, status: action.payload.status }).catch(console.error);
-          if (action.payload.status === 'Pagado' && updatedTransaction.status === 'Pendiente') {
-            const studentToUpdate = updatedStudents.find(s => s.id === updatedTransaction.studentId);
-            if (studentToUpdate) {
-              firebaseService.updateStudent(studentToUpdate).catch(console.error);
-            }
-          }
         }
         return newState;
       }

@@ -498,12 +498,15 @@ export const firebaseService = {
 
   async saveReceipt(clubId: string, receipt: Receipt): Promise<void> {
     await ensureAuth();
+    // Be defensive: accept Date or string and convert to ISO
+    const dateIso = receipt.date instanceof Date ? receipt.date.toISOString() : new Date(receipt.date).toISOString();
+
     const dbReceipt = {
       id: receipt.id,
       club_id: clubId,
       student_id: receipt.studentId,
       student_name: receipt.studentName,
-      date: receipt.date.toISOString(),
+      date: dateIso,
       transactions: receipt.transactions,
       total_amount: receipt.totalAmount,
       discount_amount: receipt.discountAmount,

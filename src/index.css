@@ -1,0 +1,290 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Colores personalizados para pádel */
+:root {
+  --padel-primary: #2D5016;     /* Verde oscuro cancha */
+  --padel-secondary: #4A7C59;   /* Verde medio */
+  --padel-accent: #8FBC8F;      /* Verde claro */
+  --padel-orange: #FF6B35;      /* Naranja pelota */
+  --padel-blue: #1E40AF;        /* Azul pala */
+  --padel-gray: #F5F5F5;        /* Gris claro fondo */
+  --padel-dark: #1F2937;        /* Gris oscuro texto */
+}
+
+/* Fondo con patrón de cancha de pádel */
+body {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  background-attachment: fixed;
+  position: relative;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: 
+    linear-gradient(90deg, rgba(45, 80, 22, 0.03) 1px, transparent 1px),
+    linear-gradient(rgba(45, 80, 22, 0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Animaciones personalizadas */
+@keyframes bounce-ball {
+  0%, 20%, 50%, 80%, 100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-10px);
+  }
+  60% {
+    transform: translateY(-5px);
+  }
+}
+
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-bounce-ball {
+  animation: bounce-ball 2s infinite;
+}
+
+.animate-slide-in {
+  animation: slide-in 0.5s ease-out;
+}
+
+/* Estilos para tarjetas con efecto de cancha */
+.padel-card {
+  background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+  border: 2px solid var(--padel-accent);
+  border-radius: 16px;
+  box-shadow: 
+    0 4px 6px -1px rgba(45, 80, 22, 0.1),
+    0 2px 4px -1px rgba(45, 80, 22, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+}
+
+.padel-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 
+    0 10px 15px -3px rgba(45, 80, 22, 0.1),
+    0 4px 6px -2px rgba(45, 80, 22, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* Botones temáticos */
+.btn-padel-primary {
+  background: linear-gradient(135deg, var(--padel-primary) 0%, var(--padel-secondary) 100%);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 24px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 6px -1px rgba(45, 80, 22, 0.3);
+}
+
+.btn-padel-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 8px -1px rgba(45, 80, 22, 0.4);
+}
+
+.btn-padel-secondary {
+  background: linear-gradient(135deg, var(--padel-orange) 0%, #ff8c42 100%);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 24px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 6px -1px rgba(255, 107, 53, 0.3);
+}
+
+.btn-padel-secondary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 8px -1px rgba(255, 107, 53, 0.4);
+}
+
+.btn-padel-danger {
+  background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 24px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 6px -1px rgba(220, 38, 38, 0.3);
+}
+
+.btn-padel-danger:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 8px -1px rgba(220, 38, 38, 0.4);
+}
+
+/* Navegación con estilo pádel */
+.padel-nav {
+  background: linear-gradient(135deg, var(--padel-primary) 0%, var(--padel-secondary) 100%);
+  backdrop-filter: blur(10px);
+  border-bottom: 3px solid var(--padel-accent);
+}
+
+/* Inputs con estilo personalizado */
+.padel-input {
+  border: 2px solid var(--padel-accent);
+  border-radius: 12px;
+  padding: 12px 16px;
+  transition: all 0.3s ease;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.padel-input:focus {
+  outline: none;
+  border-color: var(--padel-primary);
+  box-shadow: 0 0 0 3px rgba(45, 80, 22, 0.1);
+  background: white;
+}
+
+/* Tabla con estilo cancha */
+.padel-table {
+  background: white;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(45, 80, 22, 0.1);
+}
+
+.padel-table thead {
+  background: linear-gradient(135deg, var(--padel-primary) 0%, var(--padel-secondary) 100%);
+  color: white;
+}
+
+.padel-table tbody tr:nth-child(even) {
+  background: rgba(143, 188, 143, 0.05);
+}
+
+.padel-table tbody tr:hover {
+  background: rgba(143, 188, 143, 0.1);
+  transform: scale(1.01);
+  transition: all 0.2s ease;
+}
+
+/* Badges y estados */
+.badge-presente {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.badge-ausente {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.badge-pendiente {
+  background: linear-gradient(135deg, var(--padel-orange) 0%, #ff8c42 100%);
+  color: white;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Efectos de hover mejorados */
+.hover-lift {
+  transition: all 0.3s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(45, 80, 22, 0.15);
+}
+
+/* Scrollbar personalizada */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--padel-gray);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, var(--padel-primary) 0%, var(--padel-secondary) 100%);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, var(--padel-secondary) 0%, var(--padel-primary) 100%);
+}
+
+/* Elementos decorativos */
+.padel-decoration {
+  position: relative;
+}
+
+.padel-decoration::before {
+  content: '🎾';
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  font-size: 24px;
+  animation: bounce-ball 3s infinite;
+}
+
+/* Gradientes para fondos */
+.bg-padel-gradient {
+  background: linear-gradient(135deg, var(--padel-primary) 0%, var(--padel-secondary) 50%, var(--padel-accent) 100%);
+}
+
+.bg-padel-light {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 50%, #f8fafc 100%);
+}
+
+/* Sombras personalizadas */
+.shadow-padel {
+  box-shadow: 
+    0 4px 6px -1px rgba(45, 80, 22, 0.1),
+    0 2px 4px -1px rgba(45, 80, 22, 0.06);
+}
+
+.shadow-padel-lg {
+  box-shadow: 
+    0 10px 15px -3px rgba(45, 80, 22, 0.1),
+    0 4px 6px -2px rgba(45, 80, 22, 0.05);
+}
+
+/* Responsive mejoras */
+@media (max-width: 768px) {
+  .padel-card {
+    border-radius: 12px;
+    margin: 8px;
+  }
+  
+  .btn-padel-primary,
+  .btn-padel-secondary {
+    padding: 10px 20px;
+    font-size: 14px;
+  }
+}

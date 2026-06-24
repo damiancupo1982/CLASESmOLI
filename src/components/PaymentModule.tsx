@@ -59,7 +59,8 @@ export function PaymentModule() {
         id: crypto.randomUUID(),
         studentId: selectedStudent.id,
         studentName: selectedStudent.name,
-        date: new Date().toISOString(),
+        // send a Date object instead of an ISO string so persistence helpers can call toISOString()
+        date: new Date(),
         paymentMethod: 'Efectivo',
         transactions: paidTransactions.map(t => ({
           id: t.id,

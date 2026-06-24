@@ -401,20 +401,24 @@ export const firebaseService = {
 
   async saveTransaction(clubId: string, transaction: Transaction): Promise<void> {
     await ensureAuth();
-    const dbTransaction = {
+    const dateValue = transaction.date instanceof Date
+      ? transaction.date.toISOString()
+      : new Date(transaction.date).toISOString();
+
+    const dbTransaction: Record<string, unknown> = {
       id: transaction.id,
       club_id: clubId,
       student_id: transaction.studentId,
       student_name: transaction.studentName,
-      class_id: transaction.classId,
+      class_id: transaction.classId || null,
       class_name: transaction.className,
       type: transaction.type,
       amount: transaction.amount,
-      date: transaction.date.toISOString(),
-      description: transaction.description,
+      date: dateValue,
+      description: transaction.description || '',
       status: transaction.status,
-      invoice_id: transaction.invoiceId,
-      settlement_kind: transaction.settlementKind
+      invoice_id: transaction.invoiceId || null,
+      settlement_kind: transaction.settlementKind || null
     };
 
     const { error } = await supabase
@@ -425,7 +429,24 @@ export const firebaseService = {
   },
 
   async updateTransaction(clubId: string, transaction: Transaction): Promise<void> {
-    await this.saveTransaction(clubId, transaction);
+    await ensureAuth();
+    const dateValue = transaction.date instanceof Date
+      ? transaction.date.toISOString()
+      : new Date(transaction.date).toISOString();
+
+    const { error } = await supabase
+      .from('transactions')
+      .update({
+        status: transaction.status,
+        description: transaction.description || '',
+        amount: transaction.amount,
+        date: dateValue,
+        settlement_kind: transaction.settlementKind || null
+      })
+      .eq('id', transaction.id)
+      .eq('club_id', clubId);
+
+    if (error) throw error;
   },
 
   async deleteTransaction(clubId: string, id: string): Promise<void> {

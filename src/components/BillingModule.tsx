@@ -1,10 +1,9 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Search, Percent, BadgeDollarSign, CheckCircle2, ListChecks, Receipt, FileText } from 'lucide-react';
+import { Search, Percent, BadgeDollarSign, CheckCircle2, ListChecks, Receipt } from 'lucide-react';
 import { useApp } from '../context/AppContextWithClub';
 import { formatCurrency } from '../utils/format';
 import { Student, Transaction } from '../types';
 import { generateUUID } from '../utils/uuid';
-import { InvoicePreview } from './InvoicePreview';
 
 type DiscountMode = 'amount' | 'percent';
 type Tab = 'discount' | 'charge';
@@ -14,58 +13,17 @@ export function BillingModule() {
 
   const isPending = (t: any) => t?.status === 'Pendiente' && Number(t?.amount) > 0;
 
-  // Detectar clases con alumnos asignados que no tienen transacción pendiente ni pagada
-  // Estas son las clases "antiguas" que nunca generaron transacción
-  const orphanCharges = useMemo((): Transaction[] => {
-    const txClassStudentPairs = new Set(
-      state.transactions.map(t => `${t.classId}__${t.studentId}`)
-    );
-
-    const charges: Transaction[] = [];
-
-    for (const cls of state.classes) {
-      if (cls.status === 'cancelled') continue;
-      for (const studentId of cls.students || []) {
-        const key = `${cls.id}__${studentId}`;
-        if (!txClassStudentPairs.has(key)) {
-          const student = state.students.find(s => s.id === studentId);
-          if (!student) continue;
-          charges.push({
-            id: `orphan__${cls.id}__${studentId}`,
-            studentId,
-            studentName: student.name,
-            classId: cls.id,
-            className: cls.observations || (cls.type === 'individual' ? 'Clase individual' : 'Clase grupal'),
-            type: 'charge',
-            amount: cls.pricePerStudent,
-            date: new Date(cls.date),
-            description: `Clase ${cls.type}`,
-            status: 'Pendiente'
-          });
-        }
-      }
-    }
-
-    return charges;
-  }, [state.classes, state.transactions, state.students]);
-
-  // Todos los cargos pendientes: transacciones reales + clases sin transacción
-  const allPendingCharges = useMemo((): Transaction[] => {
-    const realPending = state.transactions.filter(isPending);
-    return [...realPending, ...orphanCharges].sort(
-      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-    );
-  }, [state.transactions, orphanCharges]);
-
   const pendingByStudent = useMemo(() => {
     const map = new Map<string, { studentId: string; studentName: string; total: number }>();
-    for (const t of allPendingCharges) {
-      const prev = map.get(t.studentId);
-      const total = (prev?.total || 0) + Number(t.amount || 0);
-      map.set(t.studentId, { studentId: t.studentId, studentName: t.studentName, total });
+    for (const t of state.transactions) {
+      if (isPending(t)) {
+        const prev = map.get(t.studentId);
+        const total = (prev?.total || 0) + Number(t.amount || 0);
+        map.set(t.studentId, { studentId: t.studentId, studentName: t.studentName, total });
+      }
     }
     return Array.from(map.values());
-  }, [allPendingCharges]);
+  }, [state.transactions]);
 
   // Búsqueda y selección
   const [query, setQuery] = useState('');
@@ -127,8 +85,8 @@ export function BillingModule() {
   // COBRAR CLASES (con descuento y pago parcial)
   const pendingTxForSelected = useMemo(() => {
     if (!selected) return [];
-    return allPendingCharges
-      .filter(t => t.studentId === selected.studentId)
+    return state.transactions
+      .filter(t => t.studentId === selected.studentId && isPending(t))
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [state.transactions, selected]);
 
@@ -168,9 +126,6 @@ export function BillingModule() {
   // Pago parcial
   const [paymentNow, setPaymentNow] = useState<number>(0);
   const [paymentTouched, setPaymentTouched] = useState<boolean>(false);
-
-  // Vista previa de factura
-  const [showInvoicePreview, setShowInvoicePreview] = useState<boolean>(false);
 
   useEffect(() => {
     const disc = chargeDiscMode === 'amount'
@@ -223,7 +178,6 @@ export function BillingModule() {
 
     selectedTx.forEach((t) => {
       const original = Number(t.amount || 0);
-      const isOrphan = t.id.startsWith('orphan__');
 
       const d_i = Math.min(original, remainingDiscount);
       remainingDiscount -= d_i;
@@ -235,56 +189,24 @@ export function BillingModule() {
 
       const remainder = +(afterDiscount - pay_i).toFixed(2);
 
-      if (isOrphan) {
-        // Clase sin transacción: crear la transacción directamente como pagada
-        const realTx: Transaction = {
+      // Cierro cargo original
+      ops.push(() => dispatch({ type: 'UPDATE_TRANSACTION_STATUS', payload: { id: t.id, status: 'Pagado' } }));
+
+      // Creo saldo restante (si lo hubiera)
+      if (remainder > 0) {
+        const newTx: Transaction = {
           id: generateUUID(),
           studentId: t.studentId,
           studentName: t.studentName,
           classId: t.classId,
-          className: t.className,
+          className: `${t.className} (Saldo restante)`,
           type: 'charge',
-          amount: original,
+          amount: remainder,
           date: new Date(t.date),
-          description: t.description,
-          status: 'Pagado'
+          description: `${t.description} (Saldo restante)`,
+          status: 'Pendiente'
         };
-        ops.push(() => dispatch({ type: 'ADD_TRANSACTION', payload: realTx }));
-
-        if (remainder > 0) {
-          const newTx: Transaction = {
-            id: generateUUID(),
-            studentId: t.studentId,
-            studentName: t.studentName,
-            classId: t.classId,
-            className: `${t.className} (Saldo restante)`,
-            type: 'charge',
-            amount: remainder,
-            date: new Date(t.date),
-            description: `${t.description} (Saldo restante)`,
-            status: 'Pendiente'
-          };
-          ops.push(() => dispatch({ type: 'ADD_TRANSACTION', payload: newTx }));
-        }
-      } else {
-        // Transacción real: cerrar cargo y crear saldo restante si aplica
-        ops.push(() => dispatch({ type: 'UPDATE_TRANSACTION_STATUS', payload: { id: t.id, status: 'Pagado' } }));
-
-        if (remainder > 0) {
-          const newTx: Transaction = {
-            id: generateUUID(),
-            studentId: t.studentId,
-            studentName: t.studentName,
-            classId: t.classId,
-            className: `${t.className} (Saldo restante)`,
-            type: 'charge',
-            amount: remainder,
-            date: new Date(t.date),
-            description: `${t.description} (Saldo restante)`,
-            status: 'Pendiente'
-          };
-          ops.push(() => dispatch({ type: 'ADD_TRANSACTION', payload: newTx }));
-        }
+        ops.push(() => dispatch({ type: 'ADD_TRANSACTION', payload: newTx }));
       }
     });
 
@@ -332,13 +254,6 @@ export function BillingModule() {
     setPaymentNow(0);
     setSelected(null);
   };
-
-  // Calcular totales para la factura simulada
-  const invoiceDiscount = chargeDiscMode === 'amount'
-    ? Math.max(0, Math.min(chargeDiscAmount, selectedSubtotal))
-    : Math.max(0, Math.min(+(selectedSubtotal * (chargeDiscPercent / 100)).toFixed(2), selectedSubtotal));
-
-  const invoiceTotal = Math.max(0, +(selectedSubtotal - invoiceDiscount).toFixed(2));
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -625,48 +540,20 @@ export function BillingModule() {
                   <div className="text-sm text-gray-700">
                     Total seleccionado: <span className="font-semibold">{formatCurrency(selectedSubtotal)}</span>
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setShowInvoicePreview(true)}
-                      disabled={selectedTx.length === 0}
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
-                    >
-                      <FileText size={18} />
-                      Simular Factura
-                    </button>
-                    <button
-                      onClick={cobrarSeleccionado}
-                      disabled={selectedTx.length === 0}
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-                    >
-                      <Receipt size={18} />
-                      Cobrar seleccionado y generar recibo
-                    </button>
-                  </div>
+                  <button
+                    onClick={cobrarSeleccionado}
+                    disabled={selectedTx.length === 0}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    <Receipt size={18} />
+                    Cobrar seleccionado y generar recibo
+                  </button>
                 </div>
               </>
             )}
           </>
         )}
       </div>
-
-      {/* Modal de Vista Previa de Factura */}
-      {showInvoicePreview && selected && selectedTx.length > 0 && (
-        <InvoicePreview
-          studentName={selected.studentName}
-          items={selectedTx.map(t => ({
-            id: t.id,
-            date: new Date(t.date),
-            className: t.className,
-            amount: Number(t.amount || 0)
-          }))}
-          subtotal={selectedSubtotal}
-          discount={invoiceDiscount}
-          total={invoiceTotal}
-          onClose={() => setShowInvoicePreview(false)}
-          clubName={state.currentClub?.name || 'Villanueva Tenis y Padel'}
-        />
-      )}
     </div>
   );
 }

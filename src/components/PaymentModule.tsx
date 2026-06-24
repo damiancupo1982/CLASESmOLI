@@ -10,7 +10,7 @@ export function PaymentModule() {
   const studentsWithDebt = state.students.filter(s => s.currentBalance < 0);
 
   const getPendingTransactions = (studentId: string) => {
-    return state.transactions.filter(t => t.studentId === studentId && t.status === 'Pendiente');
+    return state.transactions.filter(t => t.studentId === studentId && !t.paid);
   };
 
   const formatCurrency = (amount: number) =>
@@ -49,7 +49,7 @@ export function PaymentModule() {
 
     // Mark transactions as paid
     paidTransactions.forEach(tx => {
-      dispatch({ type: 'UPDATE_TRANSACTION_STATUS', payload: { id: tx.id, status: 'Pagado' } });
+      dispatch({ type: 'MARK_TRANSACTION_PAID', payload: tx.id });
     });
 
     // Create receipt

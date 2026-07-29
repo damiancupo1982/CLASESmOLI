@@ -1,0 +1,855 @@
+# ESTRUCTURA COMPLETA DEL SISTEMA DE GESTIÓN DE CLASES DE PÁDEL
+
+## 📁 ESTRUCTURA DE ARCHIVOS
+
+```
+clasesPadel/
+├── public/
+│   └── vite.svg
+├── src/
+│   ├── components/
+│   │   ├── AttendanceModal.tsx
+│   │   ├── BillingModule.tsx
+│   │   ├── Calendar.tsx
+│   │   ├── ClassDetail.tsx
+│   │   ├── ClassForm.tsx
+│   │   ├── ErrorBoundary.tsx
+│   │   ├── Navigation.tsx
+│   │   ├── PaymentModule.tsx
+│   │   ├── ReceiptList.tsx
+│   │   ├── ReceiptsHistory.tsx
+│   │   ├── Reports.tsx
+│   │   ├── StudentAccountHistory.tsx
+│   │   ├── StudentForm.tsx
+│   │   └── StudentList.tsx
+│   ├── context/
+│   │   └── AppContext.tsx
+│   ├── types/
+│   │   └── index.ts
+│   ├── utils/
+│   │   ├── classRecurrence.ts
+│   │   ├── format.ts
+│   │   └── storage.ts
+│   ├── App.tsx
+│   ├── index.css
+│   ├── main.tsx
+│   └── vite-env.d.ts
+├── eslint.config.js
+├── index.html
+├── package.json
+├── postcss.config.js
+├── README.md
+├── replicarClases.js
+├── tailwind.config.js
+├── tsconfig.app.json
+├── tsconfig.json
+├── tsconfig.node.json
+└── vite.config.ts
+```
+
+## 📄 ARCHIVOS COMPLETOS CON CÓDIGO
+
+### 🔧 CONFIGURACIÓN
+
+#### package.json
+```json
+{
+  "name": "vite-react-typescript-starter",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "lucide-react": "^0.344.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.9.1",
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.18",
+    "eslint": "^9.9.1",
+    "eslint-plugin-react-hooks": "^5.1.0-rc.0",
+    "eslint-plugin-react-refresh": "^0.4.11",
+    "globals": "^15.9.0",
+    "postcss": "^8.4.35",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.5.3",
+    "typescript-eslint": "^8.3.0",
+    "vite": "^5.4.2"
+  }
+}
+```
+
+#### vite.config.ts
+```typescript
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+// https://vitejs.dev/config/
+export default defineConfig({
+  plugins: [react()],
+  optimizeDeps: {
+    exclude: ['lucide-react'],
+  },
+});
+```
+
+#### tailwind.config.js
+```javascript
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+};
+```
+
+#### tsconfig.json
+```json
+{
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ]
+}
+```
+
+#### index.html
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sistema de Gestión de Clases de Pádel</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+```
+
+### 🎯 ARCHIVOS PRINCIPALES
+
+#### src/main.tsx
+```typescript
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import App from './App.tsx';
+import './index.css';
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>
+);
+```
+
+#### src/index.css
+```css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+```
+
+#### src/App.tsx
+```typescript
+import React, { useState } from 'react';
+import { AppProvider } from './context/AppContext';
+import { Navigation } from './components/Navigation';
+import { StudentList } from './components/StudentList';
+import { Calendar } from './components/Calendar';
+import { BillingModule } from './components/BillingModule';
+import { Reports } from './components/Reports';
+import { ReceiptsHistory } from './components/ReceiptsHistory';
+
+function App() {
+  const [currentView, setCurrentView] = useState('students');
+
+  const renderCurrentView = () => {
+    switch (currentView) {
+      case 'students':
+        return <StudentList />;
+      case 'calendar':
+        return <Calendar />;
+      case 'billing':
+        return <BillingModule />;
+      case 'reports':
+        return <Reports />;
+      case 'settings':
+        return (
+          <div className="text-center py-12">
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">Configuración</h2>
+            <p className="text-gray-600">En desarrollo</p>
+          </div>
+        );
+      case 'receipts':
+        return <ReceiptsHistory />;
+      default:
+        return <StudentList />;
+    }
+  };
+
+  return (
+    <AppProvider>
+      <div className="min-h-screen bg-gray-50">
+        <Navigation currentView={currentView} onViewChange={setCurrentView} />
+        <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+          {renderCurrentView()}
+        </main>
+      </div>
+    </AppProvider>
+  );
+}
+
+export default App;
+```
+
+### 📊 TIPOS Y INTERFACES
+
+#### src/types/index.ts
+```typescript
+export interface Student {
+  id: string;
+  name: string;
+  dni: string;
+  phone: string;
+  lot: string;
+  neighborhood: string;
+  condition: 'Titular' | 'Familiar';
+  observations: string;
+  currentBalance: number;
+  createdAt: Date;
+  accountHistory: AccountEntry[];
+}
+
+export interface AccountEntry {
+  id: string;
+  date: Date;
+  className: string;
+  classId: string;
+  attendanceStatus: 'Presente' | 'Ausente';
+  amount: number;
+  createdAt: Date;
+}
+
+export interface Class {
+  id: string;
+  date: Date;
+  type: 'individual' | 'group';
+  maxStudents: number;
+  pricePerStudent: number;
+  observations: string;
+  repeating: 'none' | 'weekly' | 'monthly';
+  students: string[];
+  attendances: { [studentId: string]: boolean };
+  status: 'scheduled' | 'completed' | 'cancelled';
+  createdAt: Date;
+  parentId?: string;
+}
+
+export interface Payment {
+  id: string;
+  studentId: string;
+  amount: number;
+  method: 'cash' | 'transfer' | 'card' | 'combined';
+  date: Date;
+  description: string;
+  invoiceId?: string;
+  transactionIds: string[];
+}
+
+export interface Invoice {
+  id: string;
+  studentId: string;
+  number: string;
+  date: Date;
+  items: InvoiceItem[];
+  subtotal: number;
+  total: number;
+  status: 'pending' | 'paid' | 'cancelled';
+  paymentMethod?: 'cash' | 'transfer' | 'card' | 'combined';
+  paidAt?: Date;
+}
+
+export interface InvoiceItem {
+  id: string;
+  transactionId: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+}
+
+export interface Transaction {
+  id: string;
+  studentId: string;
+  studentName: string;
+  classId?: string;
+  className: string;
+  type: 'charge' | 'payment';
+  amount: number;
+  date: Date;
+  description: string;
+  status: 'Pendiente' | 'Pagado';
+  invoiceId?: string;
+}
+
+export interface Receipt {
+  id: string;
+  studentId: string;
+  studentName: string;
+  date: Date;
+  transactions: {
+    id: string;
+    className: string;
+    date: Date;
+    amount: number;
+  }[];
+  totalAmount: number;
+}
+
+export interface User {
+  id: string;
+  name: string;
+  role: 'admin' | 'professor';
+}
+
+export interface AppState {
+  students: Student[];
+  classes: Class[];
+  payments: Payment[];
+  invoices: Invoice[];
+  transactions: Transaction[];
+  receipts: Receipt[];
+  currentUser: User;
+}
+```
+
+### 🔄 CONTEXTO Y ESTADO
+
+#### src/context/AppContext.tsx
+```typescript
+import React, { createContext, useContext, useReducer, useEffect } from 'react';
+import {
+  AppState, Student, Class, Payment, Invoice, Transaction,
+  User, Receipt
+} from '../types';
+import { loadFromStorage, saveToStorage, STORAGE_KEYS } from '../utils/storage';
+import { generateRecurringClasses } from '../utils/classRecurrence';
+
+type Action =
+  | { type: 'LOAD_DATA'; payload: Partial<AppState> }
+  | { type: 'ADD_STUDENT'; payload: Student }
+  | { type: 'UPDATE_STUDENT'; payload: Student }
+  | { type: 'DELETE_STUDENT'; payload: string }
+  | { type: 'ADD_CLASS'; payload: Class }
+  | { type: 'UPDATE_CLASS'; payload: Class }
+  | { type: 'DELETE_CLASS'; payload: string }
+  | { type: 'UPDATE_TRANSACTION_STATUS'; payload: { id: string; status: 'Pendiente' | 'Pagado' } }
+  | { type: 'ADD_TRANSACTION'; payload: Transaction }
+  | { type: 'ADD_RECEIPT'; payload: Receipt }
+  | { type: 'DELETE_RECEIPT'; payload: string }
+  | { type: 'SET_USER'; payload: User };
+
+const initialState: AppState = {
+  students: [],
+  classes: [],
+  payments: [],
+  invoices: [],
+  transactions: [],
+  receipts: [],
+  currentUser: { id: 'default', name: 'Profesor', role: 'professor' }
+};
+
+function appReducer(state: AppState, action: Action): AppState {
+  let newState: AppState;
+
+  switch (action.type) {
+    case 'LOAD_DATA':
+      return { ...state, ...action.payload };
+
+    case 'ADD_STUDENT':
+      newState = { ...state, students: [...state.students, action.payload] };
+      saveToStorage(STORAGE_KEYS.STUDENTS, newState.students);
+      return newState;
+
+    case 'UPDATE_STUDENT':
+      newState = {
+        ...state,
+        students: state.students.map(s => s.id === action.payload.id ? action.payload : s)
+      };
+      saveToStorage(STORAGE_KEYS.STUDENTS, newState.students);
+      return newState;
+
+    case 'DELETE_STUDENT':
+      newState = {
+        ...state,
+        students: state.students.filter(s => s.id !== action.payload)
+      };
+      saveToStorage(STORAGE_KEYS.STUDENTS, newState.students);
+      return newState;
+
+    case 'ADD_CLASS': {
+      const cls = action.payload;
+      let classesToAdd = [cls];
+
+      if (cls.repeating !== 'none') {
+        const recurring = generateRecurringClasses(cls).map((rec) => ({
+          ...rec,
+          students: [...cls.students],
+          pricePerStudent: cls.pricePerStudent,
+          observations: cls.observations,
+          type: cls.type
+        }));
+        classesToAdd.push(...recurring);
+      }
+
+      const updatedClasses = [...state.classes, ...classesToAdd];
+
+      const newTransactions = classesToAdd.flatMap(c =>
+        c.students.map(studentId => ({
+          id: `${c.id}_${studentId}_${Date.now()}`,
+          studentId,
+          studentName: state.students.find(s => s.id === studentId)?.name || '',
+          classId: c.id,
+          className: c.observations || '',
+          type: 'charge' as const,
+          amount: c.pricePerStudent,
+          date: new Date(c.date),
+          description: `Clase ${c.type}`,
+          status: 'Pendiente' as const
+        }))
+      );
+
+      newState = {
+        ...state,
+        classes: updatedClasses,
+        transactions: [...state.transactions, ...newTransactions]
+      };
+
+      saveToStorage(STORAGE_KEYS.CLASSES, newState.classes);
+      saveToStorage(STORAGE_KEYS.TRANSACTIONS, newState.transactions);
+      return newState;
+    }
+
+    case 'UPDATE_CLASS': {
+      const updated = action.payload;
+
+      const updatedClasses = state.classes.map(c =>
+        c.id === updated.id ? updated : c
+      );
+
+      const updatedTransactions = state.transactions.filter(t => t.classId !== updated.id);
+
+      const newTransactions = (updated.students || []).map(studentId => ({
+        id: `${updated.id}_${studentId}_${Date.now()}`,
+        studentId,
+        studentName: state.students.find(s => s.id === studentId)?.name || '',
+        classId: updated.id,
+        className: updated.observations || '',
+        type: 'charge' as const,
+        amount: updated.pricePerStudent,
+        date: new Date(updated.date),
+        description: `Clase ${updated.type}`,
+        status: 'Pendiente' as const
+      }));
+
+      newState = {
+        ...state,
+        classes: updatedClasses,
+        transactions: [...updatedTransactions, ...newTransactions]
+      };
+
+      saveToStorage(STORAGE_KEYS.CLASSES, newState.classes);
+      saveToStorage(STORAGE_KEYS.TRANSACTIONS, newState.transactions);
+      return newState;
+    }
+
+    case 'DELETE_CLASS': {
+      const cid = action.payload;
+
+      newState = {
+        ...state,
+        classes: state.classes.filter(c => c.id !== cid),
+        transactions: state.transactions.filter(t => t.classId !== cid)
+      };
+
+      saveToStorage(STORAGE_KEYS.CLASSES, newState.classes);
+      saveToStorage(STORAGE_KEYS.TRANSACTIONS, newState.transactions);
+      return newState;
+    }
+
+    case 'RECORD_ATTENDANCE': {
+      const { studentId, classId, attendanceStatus, amount, date, className } = action.payload;
+
+      if (attendanceStatus === 'Presente') {
+        const transaction = {
+          id: `${classId}_${studentId}_${Date.now()}`,
+          studentId,
+          studentName: state.students.find(s => s.id === studentId)?.name || '',
+          classId,
+          className,
+          type: 'charge' as const,
+          amount,
+          date: new Date(date),
+          description: `Clase - ${className}`,
+          status: 'Pendiente' as const
+        };
+
+        newState = {
+          ...state,
+          transactions: [...state.transactions, transaction]
+        };
+      } else {
+        newState = state;
+      }
+
+      const updatedStudents = state.students.map(student => {
+        if (student.id === studentId) {
+          const accountEntry = {
+            id: `${classId}_${studentId}_${Date.now()}`,
+            date: new Date(date),
+            className,
+            classId,
+            attendanceStatus,
+            amount: attendanceStatus === 'Presente' ? amount : 0,
+            createdAt: new Date()
+          };
+
+          return {
+            ...student,
+            accountHistory: [...(student.accountHistory || []), accountEntry],
+            currentBalance: student.currentBalance + (attendanceStatus === 'Presente' ? amount : 0)
+          };
+        }
+        return student;
+      });
+
+      newState = {
+        ...newState,
+        students: updatedStudents
+      };
+
+      saveToStorage(STORAGE_KEYS.STUDENTS, newState.students);
+      saveToStorage(STORAGE_KEYS.TRANSACTIONS, newState.transactions);
+      return newState;
+    }
+
+    case 'UPDATE_TRANSACTION_STATUS':
+      newState = {
+        ...state,
+        transactions: state.transactions.map(t =>
+          t.id === action.payload.id ? { ...t, status: action.payload.status } : t
+        )
+      };
+      saveToStorage(STORAGE_KEYS.TRANSACTIONS, newState.transactions);
+      return newState;
+
+    case 'ADD_TRANSACTION':
+      newState = {
+        ...state,
+        transactions: [...state.transactions, action.payload]
+      };
+      saveToStorage(STORAGE_KEYS.TRANSACTIONS, newState.transactions);
+      return newState;
+
+    case 'ADD_RECEIPT':
+      newState = { ...state, receipts: [...state.receipts, action.payload] };
+      saveToStorage('receipts', newState.receipts);
+      return newState;
+
+    case 'DELETE_RECEIPT':
+      newState = { ...state, receipts: state.receipts.filter(r => r.id !== action.payload) };
+      saveToStorage('receipts', newState.receipts);
+      return newState;
+
+    case 'SET_USER':
+      newState = { ...state, currentUser: action.payload };
+      saveToStorage(STORAGE_KEYS.CURRENT_USER, newState.currentUser);
+      return newState;
+
+    default:
+      return state;
+  }
+}
+
+const AppContext = createContext<{ state: AppState; dispatch: React.Dispatch<Action>; }>({
+  state: initialState,
+  dispatch: () => {}
+});
+
+export function AppProvider({ children }: { children: React.ReactNode }) {
+  const [state, dispatch] = useReducer(appReducer, initialState);
+
+  useEffect(() => {
+    const students = loadFromStorage(STORAGE_KEYS.STUDENTS) || [];
+    const classes = loadFromStorage(STORAGE_KEYS.CLASSES) || [];
+    const payments = loadFromStorage(STORAGE_KEYS.PAYMENTS) || [];
+    const invoices = loadFromStorage(STORAGE_KEYS.INVOICES) || [];
+    const transactions = (loadFromStorage(STORAGE_KEYS.TRANSACTIONS) || []).filter((t: Transaction) => t.amount !== 0);
+    const receipts = loadFromStorage('receipts') || [];
+    const currentUser = loadFromStorage(STORAGE_KEYS.CURRENT_USER) || initialState.currentUser;
+
+    dispatch({
+      type: 'LOAD_DATA',
+      payload: { students, classes, payments, invoices, transactions, receipts, currentUser }
+    });
+  }, []);
+
+  return (
+    <AppContext.Provider value={{ state, dispatch }}>
+      {children}
+    </AppContext.Provider>
+  );
+}
+
+export function useApp() {
+  return useContext(AppContext);
+}
+```
+
+### 🛠️ UTILIDADES
+
+#### src/utils/storage.ts
+```typescript
+export const STORAGE_KEYS = {
+  STUDENTS: 'students',
+  CLASSES: 'classes',
+  PAYMENTS: 'payments',
+  INVOICES: 'invoices',
+  TRANSACTIONS: 'transactions',
+  CURRENT_USER: 'currentUser'
+};
+
+export function loadFromStorage(key: string, fallback: any = null) {
+  const data = localStorage.getItem(key);
+  if (!data) return fallback;
+  
+  try {
+    const parsed = JSON.parse(data);
+    
+    // Convertir fechas en estudiantes y su historial de cuenta
+    if (key === STORAGE_KEYS.STUDENTS && Array.isArray(parsed)) {
+      return parsed.map(student => ({
+        ...student,
+        createdAt: new Date(student.createdAt),
+        accountHistory: (student.accountHistory || []).map(entry => ({
+          ...entry,
+          date: new Date(entry.date),
+          createdAt: new Date(entry.createdAt)
+        }))
+      }));
+    }
+    
+    // Convertir fechas en clases
+    if (key === STORAGE_KEYS.CLASSES && Array.isArray(parsed)) {
+      return parsed.map(cls => ({
+        ...cls,
+        date: new Date(cls.date),
+        createdAt: new Date(cls.createdAt)
+      }));
+    }
+    
+    // Convertir fechas en transacciones
+    if (key === STORAGE_KEYS.TRANSACTIONS && Array.isArray(parsed)) {
+      return parsed.map(transaction => ({
+        ...transaction,
+        date: new Date(transaction.date)
+      }));
+    }
+    
+    // Convertir fechas en pagos
+    if (key === STORAGE_KEYS.PAYMENTS && Array.isArray(parsed)) {
+      return parsed.map(payment => ({
+        ...payment,
+        date: new Date(payment.date)
+      }));
+    }
+    
+    // Convertir fechas en facturas
+    if (key === STORAGE_KEYS.INVOICES && Array.isArray(parsed)) {
+      return parsed.map(invoice => ({
+        ...invoice,
+        date: new Date(invoice.date),
+        paidAt: invoice.paidAt ? new Date(invoice.paidAt) : undefined
+      }));
+    }
+    
+    return parsed;
+  } catch (error) {
+    console.error('Error parsing stored data:', error);
+    return fallback;
+  }
+}
+
+export function saveToStorage(key: string, value: any) {
+  localStorage.setItem(key, JSON.stringify(value));
+}
+```
+
+#### src/utils/format.ts
+```typescript
+export function formatCurrency(value: number): string {
+  return value.toLocaleString('es-AR', {
+    style: 'currency',
+    currency: 'ARS',
+    minimumFractionDigits: 2
+  });
+}
+```
+
+#### src/utils/classRecurrence.ts
+```typescript
+import { Class } from '../types';
+
+export function generateRecurringClasses(cls: Class): Class[] {
+  const classes: Class[] = [];
+  const originalDate = new Date(cls.date);
+  const endOfMonth = new Date(originalDate.getFullYear(), originalDate.getMonth() + 1, 0);
+
+  let current = new Date(cls.date);
+  const maxDate = endOfMonth;
+
+  const increment = cls.repeating === 'weekly' ? 7 : cls.repeating === 'monthly' ? 30 : 0;
+
+  while (increment > 0) {
+    current = new Date(current.getTime() + increment * 24 * 60 * 60 * 1000);
+    if (current > maxDate) break;
+
+    classes.push({
+      ...cls,
+      id: `${cls.id}-${current.getTime()}`,
+      date: new Date(current),
+      parentId: cls.id,
+      students: [...(cls.students || [])],
+      attendances: {},
+      status: 'scheduled',
+      createdAt: new Date()
+    });
+  }
+
+  return classes;
+}
+```
+
+### 🧩 COMPONENTES PRINCIPALES
+
+#### src/components/Navigation.tsx
+```typescript
+import React from 'react';
+import { Users, Calendar, DollarSign, FileText, Settings } from 'lucide-react';
+
+interface NavigationProps {
+  currentView: string;
+  onViewChange: (view: string) => void;
+}
+
+export function Navigation({ currentView, onViewChange }: NavigationProps) {
+  const menuItems = [
+    { id: 'students', label: 'Alumnos', icon: Users },
+    { id: 'calendar', label: 'Agenda', icon: Calendar },
+    { id: 'billing', label: 'Facturas', icon: DollarSign },
+    { id: 'reports', label: 'Reportes', icon: FileText },
+    { id: 'receipts', label: 'Recibos', icon: FileText },
+    { id: 'settings', label: 'Configuración', icon: Settings },
+  ];
+
+  return (
+    <nav className="bg-white shadow-sm border-b">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex justify-between h-16">
+          <div className="flex items-center">
+            <div className="flex-shrink-0">
+              <h1 className="text-xl font-bold text-gray-900">Gestión Pádel</h1>
+            </div>
+          </div>
+          
+          <div className="flex items-center space-x-8">
+            {menuItems.map(item => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => onViewChange(item.id)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                    currentView === item.id
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  <Icon size={20} />
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </nav>
+  );
+}
+```
+
+## 📊 FUNCIONALIDADES DESTACADAS
+
+### 💰 Sistema de Pagos Parciales y Descuentos
+- **Pagos flexibles**: Permite cobrar montos menores al total adeudado
+- **Descuentos por clase**: Aplicar descuentos individuales
+- **Montos personalizados**: Modificar precios específicos
+- **Cálculo automático de saldos**: Genera nuevas transacciones por montos restantes
+
+### 📅 Replicación Inteligente de Clases
+- **Copia automática**: Replica clases del mes anterior por día de semana
+- **Mantiene configuración**: Preserva horarios, precios y alumnos
+- **Evita duplicados**: Verifica clases existentes antes de crear
+
+### 📊 Reportes Avanzados
+- **Exportación múltiple**: CSV, impresión, JSON
+- **Filtros por fecha**: Rangos personalizables
+- **Análisis detallado**: Por alumno, clase, período
+- **Visualización clara**: Tablas organizadas y totales
+
+### 🎯 Gestión de Asistencia
+- **Registro rápido**: Un click para marcar presente/ausente
+- **Facturación automática**: Genera cargos por asistencias
+- **Historial completo**: Seguimiento por alumno y clase
+- **Validaciones**: Previene errores de registro
+
+## 🔧 ARQUITECTURA TÉCNICA
+
+### Estado Global (Context API)
+- **Centralizado**: Un solo estado para toda la aplicación
+- **Persistente**: Guardado automático en localStorage
+- **Tipado**: TypeScript para seguridad de tipos
+- **Reducers**: Manejo predecible del estado
+
+### Componentes Modulares
+- **Reutilizables**: Componentes independientes
+- **Props tipadas**: Interfaces claras
+- **Responsivos**: Diseño adaptable
+- **Accesibles**: Buenas prácticas de UX
+
+### Almacenamiento Local
+- **Sin servidor**: Funciona completamente offline
+- **Respaldos automáticos**: Guardado en cada cambio
+- **Recuperación de errores**: Manejo de datos corruptos
+- **Migración de datos**: Conversión de fechas automática
+
+---
+
+**Sistema completo y profesional para la gestión de academias de pádel**
+**Desarrollado con React + TypeScript + Tailwind CSS**

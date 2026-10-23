@@ -1,77 +1,143 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContextWithClub';
 import { Student } from '../types';
-import { X, Calendar, DollarSign, CheckCircle, XCircle, FileText, Download, Printer } from 'lucide-react';
+import { X, Calendar, DollarSign, CheckCircle, XCircle, FileText, Download, Printer, Receipt, TrendingDown, TrendingUp, Info } from 'lucide-react';
+import { formatCurrency } from '../utils/format';
 
 interface StudentAccountHistoryProps {
   student: Student;
   onClose: () => void;
 }
 
+type HistoryItem = {
+  id: string;
+  date: Date;
+  description: string;
+  type: 'class' | 'payment' | 'receipt' | 'discount' | 'attendance';
+  amount: number;
+  status: string;
+  detail?: string;
+};
+
 export function StudentAccountHistory({ student, onClose }: StudentAccountHistoryProps) {
   const { state } = useApp();
-  const [filterStatus, setFilterStatus] = useState<'all' | 'Presente' | 'Ausente'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'pending' | 'paid'>('all');
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-AR', {
-      style: 'currency',
-      currency: 'ARS'
-    }).format(amount);
-  };
-
-  const formatDate = (date: Date) => {
-    return new Date(date).toLocaleDateString('es-AR', {
+  const formatDate = (date: Date) =>
+    new Date(date).toLocaleDateString('es-AR', {
       weekday: 'short',
       year: 'numeric',
       month: 'short',
-      day: 'numeric'
+      day: 'numeric',
     });
-  };
 
-  const completeHistory = [
-    ...(student.accountHistory || []),
-    ...state.classes
-      .filter(classData => classData.students.includes(student.id))
-      .filter(classData => !(student.accountHistory || []).some(entry => entry.classId === classData.id))
-      .map(classData => ({
-        id: `class-${classData.id}-${student.id}`,
-        date: new Date(classData.date),
-        className: classData.observations || (classData.type === 'individual' ? 'Clase individual' : 'Clase grupal'),
-        classId: classData.id,
-        attendanceStatus: 'Presente' as const,
-        amount: classData.pricePerStudent,
-        createdAt: new Date(classData.createdAt),
-        kind: 'class' as const
-      }))
-  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-  const filteredHistory = completeHistory.filter(entry =>
-    filterStatus === 'all' || entry.attendanceStatus === filterStatus
+  const studentTransactions = useMemo(
+    () => state.transactions
+      .filter(t => t.studentId === student.id)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    [state.transactions, student.id]
   );
 
-  const totalPresent = completeHistory.filter(entry => entry.attendanceStatus === 'Presente').length;
-  const totalAbsent = completeHistory.filter(entry => entry.attendanceStatus === 'Ausente').length;
-  const studentTransactions = state.transactions.filter(t => t.studentId === student.id);
-  const totalPaid = studentTransactions.filter(t => t.status === 'Pagado').reduce((sum, t) => sum + t.amount, 0);
-  const totalPending = studentTransactions.filter(t => t.status === 'Pendiente').reduce((sum, t) => sum + t.amount, 0);
+  const studentReceipts = useMemo(
+    () => state.receipts
+      .filter(r => r.studentId === student.id)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    [state.receipts, student.id]
+  );
+
+  const unifiedHistory = useMemo<HistoryItem[]>(() => {
+    const items: HistoryItem[] = [];
+
+    studentTransactions.forEach(tx => {
+      const classData = tx.classId ? state.classes.find(c => c.id === tx.classId) : null;
+      const isOrphan = tx.classId && !classData;
+      items.push({
+        id: `tx-${tx.id}`,
+        date: new Date(tx.date),
+        description: tx.className || tx.description || 'Clase',
+        type: tx.type === 'charge' ? 'class' : 'payment',
+        amount: tx.amount,
+        status: tx.status,
+        detail: isOrphan
+          ? 'La clase original fue eliminada del calendario, pero el cargo sigue registrado'
+          : classData
+            ? `Clase de ${classData.type === 'individual' ? 'individual' : 'grupo'} - ${new Date(classData.date).toLocaleString('es-AR', { hour: '2-digit', minute: '2-digit' })} hs`
+            : undefined,
+      });
+    });
+
+    studentReceipts.forEach(r => {
+      items.push({
+        id: `receipt-${r.id}`,
+        date: new Date(r.date),
+        description: `Recibo de cobro`,
+        type: 'receipt',
+        amount: r.paidAmount ?? r.totalAmount,
+        status: r.discountAmount && r.discountAmount > 0 ? `Con descuento de ${formatCurrency(r.discountAmount)}` : 'Completo',
+        detail: `${r.transactions.length} clase(s) cobrada(s) - Total: ${formatCurrency(r.totalAmount)}`,
+      });
+    });
+
+    (student.accountHistory || []).forEach(entry => {
+      if (entry.kind === 'discount') {
+        items.push({
+          id: `disc-${entry.id}`,
+          date: new Date(entry.date),
+          description: entry.note || 'Descuento aplicado',
+          type: 'discount',
+          amount: entry.amount,
+          status: 'Aplicado',
+        });
+      } else if (!studentTransactions.some(t => t.classId === entry.classId)) {
+        items.push({
+          id: `att-${entry.id}`,
+          date: new Date(entry.date),
+          description: entry.className || 'Asistencia',
+          type: 'attendance',
+          amount: entry.amount,
+          status: entry.attendanceStatus,
+        });
+      }
+    });
+
+    return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [studentTransactions, studentReceipts, student.accountHistory, state.classes]);
+
+  const filteredHistory = useMemo(() => {
+    if (filterType === 'all') return unifiedHistory;
+    return unifiedHistory.filter(item => {
+      if (filterType === 'pending') return item.status === 'Pendiente';
+      if (filterType === 'paid') return item.status === 'Pagado';
+      return true;
+    });
+  }, [unifiedHistory, filterType]);
+
+  const totalCharges = studentTransactions
+    .filter(t => t.type === 'charge')
+    .reduce((sum, t) => sum + Number(t.amount || 0), 0);
+  const totalPaid = studentTransactions
+    .filter(t => t.status === 'Pagado')
+    .reduce((sum, t) => sum + Number(t.amount || 0), 0);
+  const totalPending = studentTransactions
+    .filter(t => t.status === 'Pendiente')
+    .reduce((sum, t) => sum + Number(t.amount || 0), 0);
 
   const exportToCSV = () => {
-    const headers = ['Fecha', 'Clase', 'Asistencia', 'Monto', 'Estado Pago'];
+    const headers = ['Fecha', 'Descripcion', 'Tipo', 'Monto', 'Estado'];
     const csvContent = [
       headers.join(','),
-      ...filteredHistory.map(entry => {
-        const transaction = studentTransactions.find(t => t.classId === entry.classId);
-        return [
-          formatDate(entry.date),
-          `"${entry.className}"`,
-          entry.attendanceStatus,
-          entry.amount,
-          transaction?.status || 'N/A'
-        ].join(',');
-      })
+      ...filteredHistory.map(item =>
+        [
+          formatDate(item.date),
+          `"${item.description}"`,
+          item.type,
+          item.amount,
+          `"${item.status}"`,
+        ].join(',')
+      ),
     ].join('\n');
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
     link.download = `cuenta_corriente_${student.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`;
@@ -92,68 +158,41 @@ export function StudentAccountHistory({ student, onClose }: StudentAccountHistor
             table { width: 100%; border-collapse: collapse; margin-top: 20px; }
             th, td { border: 1px solid #d1d5db; padding: 8px; text-align: left; }
             th { background-color: #f3f4f6; font-weight: bold; }
-            .presente { color: #059669; }
-            .ausente { color: #dc2626; }
+            .pagado { color: #059669; }
+            .pendiente { color: #dc2626; }
           </style>
         </head>
         <body>
           <h1>Cuenta Corriente</h1>
-          
           <div class="student-info">
             <h2>${student.name}</h2>
             <p><strong>DNI:</strong> ${student.dni}</p>
             <p><strong>Teléfono:</strong> ${student.phone}</p>
             <p><strong>Fecha de generación:</strong> ${new Date().toLocaleDateString('es-AR')}</p>
           </div>
-          
           <div class="summary">
-            <div class="summary-item">
-              <h3>Clases Asistidas</h3>
-              <p style="font-size: 24px; font-weight: bold; color: #059669;">${totalPresent}</p>
-            </div>
-            <div class="summary-item">
-              <h3>Ausencias</h3>
-              <p style="font-size: 24px; font-weight: bold; color: #dc2626;">${totalAbsent}</p>
-            </div>
-            <div class="summary-item">
-              <h3>Total Pagado</h3>
-              <p style="font-size: 24px; font-weight: bold; color: #059669;">${formatCurrency(totalPaid)}</p>
-            </div>
-            <div class="summary-item">
-              <h3>Saldo Pendiente</h3>
-              <p style="font-size: 24px; font-weight: bold; color: #dc2626;">${formatCurrency(totalPending)}</p>
-            </div>
+            <div class="summary-item"><h3>Total Cargos</h3><p style="font-size:24px;font-weight:bold;">${formatCurrency(totalCharges)}</p></div>
+            <div class="summary-item"><h3>Total Pagado</h3><p style="font-size:24px;font-weight:bold;color:#059669;">${formatCurrency(totalPaid)}</p></div>
+            <div class="summary-item"><h3>Saldo Pendiente</h3><p style="font-size:24px;font-weight:bold;color:#dc2626;">${formatCurrency(totalPending)}</p></div>
+            <div class="summary-item"><h3>Cantidad de recibos</h3><p style="font-size:24px;font-weight:bold;">${studentReceipts.length}</p></div>
           </div>
-          
           <table>
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>Clase</th>
-                <th>Asistencia</th>
-                <th>Monto</th>
-                <th>Estado Pago</th>
-              </tr>
-            </thead>
+            <thead><tr><th>Fecha</th><th>Descripción</th><th>Tipo</th><th>Monto</th><th>Estado</th></tr></thead>
             <tbody>
-              ${filteredHistory.map(entry => {
-                const transaction = studentTransactions.find(t => t.classId === entry.classId);
-                return `
-                  <tr>
-                    <td>${formatDate(entry.date)}</td>
-                    <td>${entry.className}</td>
-                    <td class="${entry.attendanceStatus.toLowerCase()}">${entry.attendanceStatus}</td>
-                    <td>${formatCurrency(entry.amount)}</td>
-                    <td>${transaction?.status || 'N/A'}</td>
-                  </tr>
-                `;
-              }).join('')}
+              ${filteredHistory.map(item => `
+                <tr>
+                  <td>${formatDate(item.date)}</td>
+                  <td>${item.description}${item.detail ? '<br><small>' + item.detail + '</small>' : ''}</td>
+                  <td>${item.type}</td>
+                  <td>${formatCurrency(item.amount)}</td>
+                  <td class="${item.status === 'Pagado' ? 'pagado' : item.status === 'Pendiente' ? 'pendiente' : ''}">${item.status}</td>
+                </tr>
+              `).join('')}
             </tbody>
           </table>
         </body>
       </html>
     `;
-
     const printWindow = window.open('', '_blank');
     if (printWindow) {
       printWindow.document.write(printContent);
@@ -162,25 +201,33 @@ export function StudentAccountHistory({ student, onClose }: StudentAccountHistor
     }
   };
 
+  const typeConfig = {
+    class: { icon: <Calendar size={16} className="text-blue-600" />, label: 'Cargo por clase', color: 'blue' },
+    payment: { icon: <DollarSign size={16} className="text-green-600" />, label: 'Pago', color: 'green' },
+    receipt: { icon: <Receipt size={16} className="text-purple-600" />, label: 'Recibo', color: 'purple' },
+    discount: { icon: <TrendingDown size={16} className="text-orange-600" />, label: 'Descuento', color: 'orange' },
+    attendance: { icon: <CheckCircle size={16} className="text-gray-500" />, label: 'Asistencia', color: 'gray' },
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-screen overflow-y-auto">
-        {/* Cabecera */}
+      <div className="bg-white rounded-lg p-6 w-full max-w-5xl max-h-[95vh] overflow-y-auto">
+        {/* Header */}
         <div className="flex justify-between items-center mb-6">
           <div>
             <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
               <FileText size={24} className="text-blue-600" />
               Cuenta Corriente - {student.name}
             </h2>
-            <p className="text-sm text-gray-600">
-              DNI: {student.dni} | Teléfono: {student.phone}
+            <p className="text-sm text-gray-600 mt-1">
+              DNI: {student.dni} | Tel: {student.phone}
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            <button onClick={exportToCSV} className="bg-green-600 text-white px-3 py-2 rounded-md hover:bg-green-700 transition-colors flex items-center gap-2">
+          <div className="flex items-center gap-2">
+            <button onClick={exportToCSV} className="bg-green-600 text-white px-3 py-2 rounded-md hover:bg-green-700 transition-colors flex items-center gap-2 text-sm">
               <Download size={16} /> CSV
             </button>
-            <button onClick={handlePrint} className="bg-blue-600 text-white px-3 py-2 rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2">
+            <button onClick={handlePrint} className="bg-blue-600 text-white px-3 py-2 rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm">
               <Printer size={16} /> Imprimir
             </button>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
@@ -189,107 +236,144 @@ export function StudentAccountHistory({ student, onClose }: StudentAccountHistor
           </div>
         </div>
 
-        {/* Resumen */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <ResumenItem icon={<CheckCircle size={20} className="text-green-600" />} label="Clases Asistidas" value={totalPresent} color="green" />
-          <ResumenItem icon={<XCircle size={20} className="text-red-600" />} label="Ausencias" value={totalAbsent} color="red" />
-          <ResumenItem icon={<CheckCircle size={20} className="text-green-600" />} label="Total Pagado" value={formatCurrency(totalPaid)} color="green" />
-          <ResumenItem icon={<DollarSign size={20} className="text-red-600" />} label="Saldo Pendiente" value={formatCurrency(totalPending)} color="red" />
+        {/* Summary cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+          <div className="bg-blue-50 rounded-lg p-4">
+            <div className="flex items-center gap-2">
+              <TrendingUp size={20} className="text-blue-600" />
+              <div>
+                <p className="text-sm font-medium text-blue-800">Total Cargos</p>
+                <p className="text-xl font-bold text-blue-900">{formatCurrency(totalCharges)}</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-green-50 rounded-lg p-4">
+            <div className="flex items-center gap-2">
+              <CheckCircle size={20} className="text-green-600" />
+              <div>
+                <p className="text-sm font-medium text-green-800">Total Pagado</p>
+                <p className="text-xl font-bold text-green-900">{formatCurrency(totalPaid)}</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-red-50 rounded-lg p-4">
+            <div className="flex items-center gap-2">
+              <DollarSign size={20} className="text-red-600" />
+              <div>
+                <p className="text-sm font-medium text-red-800">Saldo Pendiente</p>
+                <p className="text-xl font-bold text-red-900">{formatCurrency(totalPending)}</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-purple-50 rounded-lg p-4">
+            <div className="flex items-center gap-2">
+              <Receipt size={20} className="text-purple-600" />
+              <div>
+                <p className="text-sm font-medium text-purple-800">Recibos emitidos</p>
+                <p className="text-xl font-bold text-purple-900">{studentReceipts.length}</p>
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* Filtros */}
+        {/* Filters */}
         <div className="flex gap-2 mb-4">
-          {['all', 'Presente', 'Ausente'].map(status => (
+          {[
+            { key: 'all', label: 'Todo el historial' },
+            { key: 'pending', label: 'Pendientes de cobro' },
+            { key: 'paid', label: 'Pagados' },
+          ].map(({ key, label }) => (
             <button
-              key={status}
-              onClick={() => setFilterStatus(status as any)}
-              className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-                filterStatus === status
-                  ? status === 'Presente' ? 'bg-green-600 text-white'
-                  : status === 'Ausente' ? 'bg-red-600 text-white'
-                  : 'bg-blue-600 text-white'
+              key={key}
+              onClick={() => setFilterType(key as any)}
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                filterType === key
+                  ? 'bg-blue-600 text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              {status === 'all' ? 'Todas' : status}s ({completeHistory.filter(e => status === 'all' || e.attendanceStatus === status).length})
+              {label}
             </button>
           ))}
         </div>
 
-        {/* Historial */}
-        <div className="bg-white border rounded-lg">
+        {/* Unified history table */}
+        <div className="bg-white border rounded-lg overflow-hidden">
           <div className="px-4 py-3 border-b bg-gray-50">
-            <h3 className="font-semibold text-gray-900">Historial de Clases</h3>
+            <h3 className="font-semibold text-gray-900">
+              Historial completo ({filteredHistory.length} registros)
+            </h3>
           </div>
-          <div className="overflow-x-auto">
-            {filteredHistory.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <Calendar size={48} className="mx-auto mb-2 text-gray-300" />
-                <p>No hay registros de asistencia</p>
-              </div>
-            ) : (
+          {filteredHistory.length === 0 ? (
+            <div className="text-center py-12 text-gray-500">
+              <Calendar size={48} className="mx-auto mb-2 text-gray-300" />
+              <p>No hay registros para este filtro</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto max-h-[45vh] overflow-y-auto">
               <table className="w-full">
-                <thead className="bg-gray-50">
+                <thead className="bg-gray-50 sticky top-0">
                   <tr>
                     <th className="text-left py-3 px-4 font-medium text-gray-900">Fecha</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-900">Clase</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-900">Asistencia</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-900">Monto</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-900">Estado Pago</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-900">Concepto</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-900">Tipo</th>
+                    <th className="text-right py-3 px-4 font-medium text-gray-900">Monto</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-900">Estado</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredHistory
-                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                    .map((entry) => {
-                      const transaction = studentTransactions.find(t => t.classId === entry.classId);
-                      return (
-                        <tr key={entry.id} className="border-b border-gray-100 hover:bg-gray-50">
-                          <td className="py-3 px-4 text-gray-900">{formatDate(entry.date)}</td>
-                          <td className="py-3 px-4 text-gray-900">
-                            <div>{entry.className}</div>
-                            {entry.kind === 'class' && (
-                              <div className="text-xs text-gray-500">{studentTransactions.find(t => t.classId === entry.classId)?.status || 'Pendiente de registrar'}</div>
-                            )}
-                          </td>
-                          <td className="py-3 px-4">
-                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
-                              entry.attendanceStatus === 'Presente' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                            }`}>
-                              {entry.attendanceStatus === 'Presente' ? <CheckCircle size={12} /> : <XCircle size={12} />}
-                              {entry.attendanceStatus}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4">
-                            <span className={`font-medium ${
-                              entry.amount > 0 ? 'text-green-600' : 'text-gray-500'
-                            }`}>
-                              {formatCurrency(entry.amount)}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4">
-                            {transaction ? (
-                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                transaction.status === 'Pagado'
-                                  ? 'bg-green-100 text-green-800'
-                                  : 'bg-red-100 text-red-800'
-                              }`}>
-                                {transaction.status}
-                              </span>
-                            ) : (
-                              <span className="text-gray-400 text-xs">N/A</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
+                  {filteredHistory.map((item) => {
+                    const cfg = typeConfig[item.type];
+                    return (
+                      <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="py-3 px-4 text-gray-900 text-sm whitespace-nowrap">
+                          {formatDate(item.date)}
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="flex items-start gap-2">
+                            {cfg.icon}
+                            <div>
+                              <p className="text-gray-900 text-sm font-medium">{item.description}</p>
+                              {item.detail && (
+                                <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
+                                  <Info size={12} />
+                                  {item.detail}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-sm text-gray-600">{cfg.label}</td>
+                        <td className="py-3 px-4 text-right">
+                          <span className={`font-medium text-sm ${
+                            item.amount > 0 ? 'text-gray-900'
+                            : item.amount < 0 ? 'text-orange-600'
+                            : 'text-gray-400'
+                          }`}>
+                            {formatCurrency(item.amount)}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                            item.status === 'Pagado' ? 'bg-green-100 text-green-800'
+                            : item.status === 'Pendiente' ? 'bg-red-100 text-red-800'
+                            : 'bg-gray-100 text-gray-600'
+                          }`}>
+                            {item.status === 'Pagado' && <CheckCircle size={12} />}
+                            {item.status === 'Pendiente' && <XCircle size={12} />}
+                            {item.status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
-        {/* Botón cerrar */}
+        {/* Close button */}
         <div className="flex justify-end mt-6">
           <button
             onClick={onClose}
@@ -297,20 +381,6 @@ export function StudentAccountHistory({ student, onClose }: StudentAccountHistor
           >
             Cerrar
           </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ResumenItem({ icon, label, value, color }) {
-  return (
-    <div className={`bg-${color}-50 rounded-lg p-4`}>
-      <div className="flex items-center gap-2">
-        {icon}
-        <div>
-          <p className={`text-sm font-medium text-${color}-800`}>{label}</p>
-          <p className={`text-2xl font-bold text-${color}-900`}>{value}</p>
         </div>
       </div>
     </div>

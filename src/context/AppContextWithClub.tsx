@@ -7,6 +7,18 @@ import { generateRecurringClasses } from '../utils/classRecurrence';
 import { createFirebaseServiceWithClub } from '../utils/firebaseWithClub';
 import { generateUUID } from '../utils/uuid';
 
+function notifySaveError(message: string) {
+  window.dispatchEvent(new CustomEvent('save-error', { detail: { message } }));
+}
+
+function safeSave<T>(promise: Promise<T>, label: string): Promise<T> {
+  return promise.catch(err => {
+    console.error(`Error guardando ${label}:`, err);
+    notifySaveError(`No se pudo guardar: ${label}. Revisá tu conexión e intentá de nuevo.`);
+    throw err;
+  });
+}
+
 type ApplyDiscountPayload = {
   studentId: string;
   mode: 'amount' | 'percent';
@@ -53,14 +65,8 @@ function createAppReducer(clubId: string) {
         return { ...state, ...action.payload };
 
       case 'ADD_STUDENT':
-        console.log('🟢 ADD_STUDENT: Guardando alumno:', action.payload);
         newState = { ...state, students: [...state.students, action.payload] };
-        firebaseService.saveStudent(action.payload)
-          .then(() => console.log('✅ Alumno guardado exitosamente en Firebase'))
-          .catch(err => {
-            console.error('❌ ERROR al guardar alumno en Firebase:', err);
-            console.error('Detalles del error:', err.message);
-          });
+        safeSave(firebaseService.saveStudent(action.payload), 'alumno');
         return newState;
 
       case 'UPDATE_STUDENT':
@@ -68,7 +74,7 @@ function createAppReducer(clubId: string) {
           ...state,
           students: state.students.map(s => s.id === action.payload.id ? action.payload : s)
         };
-        firebaseService.updateStudent(action.payload).catch(console.error);
+        safeSave(firebaseService.updateStudent(action.payload), 'alumno');
         return newState;
 
       case 'DELETE_STUDENT':
@@ -76,7 +82,7 @@ function createAppReducer(clubId: string) {
           ...state,
           students: state.students.filter(s => s.id !== action.payload)
         };
-        firebaseService.deleteStudent(action.payload).catch(console.error);
+        safeSave(firebaseService.deleteStudent(action.payload), 'alumno');
         return newState;
 
       case 'ADD_CLASS': {
@@ -117,21 +123,8 @@ function createAppReducer(clubId: string) {
           transactions: [...state.transactions, ...newTransactions]
         };
 
-        classesToAdd.forEach(cls => {
-          console.log('💾 Guardando clase en Firebase:', cls.id);
-          firebaseService.saveClass(cls)
-            .then(() => console.log('✅ Clase guardada exitosamente:', cls.id))
-            .catch(err => {
-              console.error('❌ ERROR al guardar clase:', cls.id, err);
-              console.error('Detalles:', err.message);
-            });
-        });
-        newTransactions.forEach(tx => {
-          console.log('💾 Guardando transacción:', tx.id);
-          firebaseService.saveTransaction(tx)
-            .then(() => console.log('✅ Transacción guardada:', tx.id))
-            .catch(err => console.error('❌ ERROR al guardar transacción:', tx.id, err));
-        });
+        classesToAdd.forEach(cls => safeSave(firebaseService.saveClass(cls), 'clase'));
+        newTransactions.forEach(tx => safeSave(firebaseService.saveTransaction(tx), 'transacción de la clase'));
         return newState;
       }
 
@@ -176,16 +169,16 @@ function createAppReducer(clubId: string) {
           transactions: [...updatedTransactions, ...newTransactions]
         };
 
-        firebaseService.updateClass(updated).catch(console.error);
-        newTransactions.forEach(tx => firebaseService.saveTransaction(tx).catch(console.error));
+        safeSave(firebaseService.updateClass(updated), 'clase');
+        newTransactions.forEach(tx => safeSave(firebaseService.saveTransaction(tx), 'transacción de la clase'));
         if (previousStudentIds.some(studentId => !keptStudentIds.has(studentId))) {
           state.transactions
             .filter(t => t.classId === updated.id && !keptStudentIds.has(t.studentId) && t.status === 'Pendiente')
-            .forEach(t => firebaseService.deleteTransaction(t.id).catch(console.error));
+            .forEach(t => safeSave(firebaseService.deleteTransaction(t.id), 'transacción eliminada'));
         }
         updatedTransactions
           .filter(t => t.classId === updated.id && t.status === 'Pendiente')
-          .forEach(tx => firebaseService.updateTransaction(tx).catch(console.error));
+          .forEach(tx => safeSave(firebaseService.updateTransaction(tx), 'transacción de la clase'));
         return newState;
       }
 
@@ -197,7 +190,7 @@ function createAppReducer(clubId: string) {
           classes: state.classes.filter(c => c.id !== cid)
         };
 
-        firebaseService.deleteClass(cid).catch(console.error);
+        safeSave(firebaseService.deleteClass(cid), 'clase eliminada');
         return newState;
       }
 
@@ -219,9 +212,7 @@ function createAppReducer(clubId: string) {
           })
         };
 
-        classesToDelete.forEach(cls => {
-          firebaseService.deleteClass(cls.id).catch(console.error);
-        });
+        classesToDelete.forEach(cls => safeSave(firebaseService.deleteClass(cls.id), 'clase eliminada del mes'));
 
         return newState;
       }
@@ -270,8 +261,8 @@ function createAppReducer(clubId: string) {
         newState = { ...state, transactions, students: updatedStudents };
         updatedStudents
           .filter(student => student.id === studentId)
-          .forEach(student => firebaseService.updateStudent(student).catch(console.error));
-        if (transaction) firebaseService.saveTransaction(transaction).catch(console.error);
+          .forEach(student => safeSave(firebaseService.updateStudent(student), 'alumno (asistencia)'));
+        if (transaction) safeSave(firebaseService.saveTransaction(transaction), 'transacción de asistencia');
         return newState;
       }
 
@@ -284,7 +275,7 @@ function createAppReducer(clubId: string) {
           )
         };
         if (updatedTransaction) {
-          firebaseService.updateTransaction({ ...updatedTransaction, status: action.payload.status }).catch(console.error);
+          safeSave(firebaseService.updateTransaction({ ...updatedTransaction, status: action.payload.status }), 'estado de transacción');
         }
         return newState;
       }
@@ -294,17 +285,17 @@ function createAppReducer(clubId: string) {
           ...state,
           transactions: [...state.transactions, action.payload]
         };
-        firebaseService.saveTransaction(action.payload).catch(console.error);
+        safeSave(firebaseService.saveTransaction(action.payload), 'transacción');
         return newState;
 
       case 'ADD_RECEIPT':
         newState = { ...state, receipts: [...state.receipts, action.payload] };
-        firebaseService.saveReceipt(action.payload).catch(console.error);
+        safeSave(firebaseService.saveReceipt(action.payload), 'recibo');
         return newState;
 
       case 'DELETE_RECEIPT':
         newState = { ...state, receipts: state.receipts.filter(r => r.id !== action.payload) };
-        firebaseService.deleteReceipt(action.payload).catch(console.error);
+        safeSave(firebaseService.deleteReceipt(action.payload), 'recibo eliminado');
         return newState;
 
       case 'APPLY_DISCOUNT': {
@@ -374,21 +365,21 @@ function createAppReducer(clubId: string) {
 
         updatedStudents.forEach(student => {
           if (student.id === studentId) {
-            firebaseService.updateStudent(student).catch(console.error);
+            safeSave(firebaseService.updateStudent(student), 'alumno (descuento)');
           }
         });
         updatedTransactions.forEach(tx => {
           if (tx.studentId === studentId) {
-            firebaseService.updateTransaction(tx).catch(console.error);
+            safeSave(firebaseService.updateTransaction(tx), 'transacción (descuento)');
           }
         });
-        firebaseService.saveReceipt(discountReceipt).catch(console.error);
+        safeSave(firebaseService.saveReceipt(discountReceipt), 'recibo de descuento');
         return newState;
       }
 
       case 'SET_USER':
         newState = { ...state, currentUser: action.payload };
-        firebaseService.saveCurrentUser(action.payload).catch(console.error);
+        safeSave(firebaseService.saveCurrentUser(action.payload), 'usuario');
         return newState;
 
       default:
@@ -406,15 +397,23 @@ export function AppProvider({ children, clubId }: { children: React.ReactNode; c
   const appReducer = createAppReducer(clubId);
   const [state, dispatch] = useReducer(appReducer, initialState);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const firebaseService = createFirebaseServiceWithClub(clubId);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      setSaveError(detail?.message || 'Error al guardar datos.');
+    };
+    window.addEventListener('save-error', handler);
+    return () => window.removeEventListener('save-error', handler);
+  }, []);
 
   useEffect(() => {
     if (!clubId) {
       console.warn('⚠️ No hay clubId, no se pueden cargar datos');
       return;
     }
-
-    console.log('🔄 Cargando datos para club:', clubId);
 
     const loadData = async () => {
       try {
@@ -455,9 +454,8 @@ export function AppProvider({ children, clubId }: { children: React.ReactNode; c
               status: 'Pendiente' as const
             }))
         );
-        recoveredTransactions.forEach(transaction => firebaseService.saveTransaction(transaction).catch(console.error));
-        const filteredTransactions = [...transactions, ...recoveredTransactions]
-          .filter((t: Transaction) => t.amount !== 0 || t.settlementKind === 'discount');
+        recoveredTransactions.forEach(transaction => safeSave(firebaseService.saveTransaction(transaction), 'transacción recuperada'));
+        const filteredTransactions = [...transactions, ...recoveredTransactions];
 
         dispatch({
           type: 'LOAD_DATA',
@@ -487,6 +485,19 @@ export function AppProvider({ children, clubId }: { children: React.ReactNode; c
       {loadError && (
         <div className="mx-auto mt-4 max-w-7xl rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           {loadError}
+        </div>
+      )}
+      {saveError && (
+        <div className="fixed bottom-4 right-4 z-[100] max-w-sm rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 shadow-lg animate-slide-in">
+          <div className="flex items-start justify-between gap-2">
+            <span>{saveError}</span>
+            <button
+              onClick={() => setSaveError(null)}
+              className="text-red-400 hover:text-red-600 flex-shrink-0"
+            >
+              x
+            </button>
+          </div>
         </div>
       )}
       {children}

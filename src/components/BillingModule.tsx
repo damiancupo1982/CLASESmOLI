@@ -153,19 +153,24 @@ export function BillingModule() {
   const shareDebtOnWhatsApp = () => {
     if (!selected || selectedTx.length === 0) return;
     const student = state.students.find(s => s.id === selected.studentId);
-    const phone = (student?.phone || '').replace(/[^0-9]/g, '');
-    if (!phone) {
+    const rawPhone = (student?.phone || '').replace(/[^0-9]/g, '');
+    if (!rawPhone) {
       alert('Este alumno no tiene un teléfono cargado.');
       return;
     }
+    const phone = rawPhone.startsWith('54') ? rawPhone : `54${rawPhone}`;
     const total = selectedTx.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
     const lines = selectedTx.map(transaction =>
-      `- ${new Date(transaction.date).toLocaleDateString('es-AR')}: ${formatCurrency(Number(transaction.amount || 0))}`
+      `• ${new Date(transaction.date).toLocaleDateString('es-AR')} - ${transaction.className || transaction.description}: ${formatCurrency(Number(transaction.amount || 0))}`
     );
     const message = [
-      `Hola ${selected.studentName}, te comparto el detalle de las clases pendientes:`,
+      `Hola ${selected.studentName}, te comparto el detalle de las clases pendientes de pago:`,
+      '',
       ...lines,
-      `Total pendiente seleccionado: ${formatCurrency(total)}`
+      '',
+      `Total pendiente: ${formatCurrency(total)}`,
+      '',
+      'Cualquier consulta estoy a disposición.',
     ].join('\n');
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
   };

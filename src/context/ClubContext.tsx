@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Club } from '../types';
 import { firebaseService } from '../firebase/firebaseService';
+import { hasLegacyData, migrateLocalStorageToClub } from '../utils/migrateToFirebase';
 
 interface ClubContextType {
   currentClub: Club | null;
@@ -31,25 +32,44 @@ export function ClubProvider({ children }: { children: React.ReactNode }) {
   const [clubs, setClubs] = useState<Club[]>([]);
 
   useEffect(() => {
-    loadClubs();
-    const savedClub = localStorage.getItem('currentClub');
-    if (savedClub) {
+    const bootstrap = async () => {
+      const loadedClubs = await loadClubs();
+      const savedClub = localStorage.getItem('currentClub');
+      if (!savedClub) return;
       try {
-        const club = JSON.parse(savedClub);
-        club.createdAt = new Date(club.createdAt);
-        setCurrentClubState(club);
+        const parsedClub = JSON.parse(savedClub);
+        const club = loadedClubs.find(item => item.id === parsedClub.id);
+        if (club) setCurrentClubState(club);
       } catch (error) {
         console.error('Error loading saved club:', error);
       }
-    }
+    };
+    bootstrap();
   }, []);
 
   const loadClubs = async () => {
     try {
-      const loadedClubs = await firebaseService.getAllClubs();
+      let loadedClubs = await firebaseService.getAllClubs();
+      if (loadedClubs.length === 0 && hasLegacyData()) {
+        const savedClub = JSON.parse(localStorage.getItem('currentClub') || 'null');
+        const recoveredClubId = await firebaseService.createClub({
+          name: savedClub?.name || 'Club recuperado',
+          password: savedClub?.password || 'recuperado',
+          description: savedClub?.description || 'Datos recuperados del navegador'
+        });
+        await migrateLocalStorageToClub(recoveredClubId);
+        loadedClubs = await firebaseService.getAllClubs();
+        const recoveredClub = loadedClubs.find(club => club.id === recoveredClubId);
+        if (recoveredClub) {
+          setCurrentClubState(recoveredClub);
+          localStorage.setItem('currentClub', JSON.stringify(recoveredClub));
+        }
+      }
       setClubs(loadedClubs);
+      return loadedClubs;
     } catch (error) {
       console.error('Error loading clubs:', error);
+      return [];
     }
   };
 

@@ -1,5 +1,14 @@
-import { firebaseService } from '../firebase/firebaseService';
 import { Student, Class, Transaction, Receipt, Payment, Invoice } from '../types';
+import { createFirebaseServiceWithClub } from './firebaseWithClub';
+
+type LegacyData = {
+  students: Student[];
+  classes: Class[];
+  transactions: Transaction[];
+  receipts: Receipt[];
+  payments: Payment[];
+  invoices: Invoice[];
+};
 
 const parseLocalStorageDate = (item: any) => {
   if (item.date) item.date = new Date(item.date);
@@ -24,77 +33,40 @@ const parseLocalStorageDate = (item: any) => {
   return item;
 };
 
-export async function migrateLocalStorageToFirebase(): Promise<void> {
-  try {
-    console.log('Starting migration from localStorage to Firebase...');
+export function readLegacyData(): LegacyData {
+  return {
+    students: JSON.parse(localStorage.getItem('students') || '[]').map(parseLocalStorageDate),
+    classes: JSON.parse(localStorage.getItem('classes') || '[]').map(parseLocalStorageDate),
+    transactions: JSON.parse(localStorage.getItem('transactions') || '[]').map(parseLocalStorageDate),
+    receipts: JSON.parse(localStorage.getItem('receipts') || '[]').map(parseLocalStorageDate),
+    payments: JSON.parse(localStorage.getItem('payments') || '[]').map(parseLocalStorageDate),
+    invoices: JSON.parse(localStorage.getItem('invoices') || '[]').map(parseLocalStorageDate)
+  };
+}
 
-    const students: Student[] = JSON.parse(localStorage.getItem('students') || '[]').map(parseLocalStorageDate);
-    const classes: Class[] = JSON.parse(localStorage.getItem('classes') || '[]').map(parseLocalStorageDate);
-    const transactions: Transaction[] = JSON.parse(localStorage.getItem('transactions') || '[]').map(parseLocalStorageDate);
-    const receipts: Receipt[] = JSON.parse(localStorage.getItem('receipts') || '[]').map(parseLocalStorageDate);
-    const payments: Payment[] = JSON.parse(localStorage.getItem('payments') || '[]').map(parseLocalStorageDate);
-    const invoices: Invoice[] = JSON.parse(localStorage.getItem('invoices') || '[]').map(parseLocalStorageDate);
+export function hasLegacyData(): boolean {
+  if (typeof window === 'undefined') return false;
+  const data = readLegacyData();
+  return Object.values(data).some(items => items.length > 0);
+}
 
-    console.log(`Found ${students.length} students, ${classes.length} classes, ${transactions.length} transactions`);
+export async function migrateLocalStorageToClub(clubId: string): Promise<void> {
+  const data = readLegacyData();
+  const service = createFirebaseServiceWithClub(clubId);
 
-    if (students.length > 0) {
-      console.log('Migrating students...');
-      for (const student of students) {
-        await firebaseService.saveStudent(student);
-      }
-      console.log(`✓ Migrated ${students.length} students`);
-    }
-
-    if (classes.length > 0) {
-      console.log('Migrating classes...');
-      for (const classItem of classes) {
-        await firebaseService.saveClass(classItem);
-      }
-      console.log(`✓ Migrated ${classes.length} classes`);
-    }
-
-    if (transactions.length > 0) {
-      console.log('Migrating transactions...');
-      for (const transaction of transactions) {
-        await firebaseService.saveTransaction(transaction);
-      }
-      console.log(`✓ Migrated ${transactions.length} transactions`);
-    }
-
-    if (receipts.length > 0) {
-      console.log('Migrating receipts...');
-      for (const receipt of receipts) {
-        await firebaseService.saveReceipt(receipt);
-      }
-      console.log(`✓ Migrated ${receipts.length} receipts`);
-    }
-
-    if (payments.length > 0) {
-      console.log('Migrating payments...');
-      for (const payment of payments) {
-        await firebaseService.savePayment(payment);
-      }
-      console.log(`✓ Migrated ${payments.length} payments`);
-    }
-
-    if (invoices.length > 0) {
-      console.log('Migrating invoices...');
-      for (const invoice of invoices) {
-        await firebaseService.saveInvoice(invoice);
-      }
-      console.log(`✓ Migrated ${invoices.length} invoices`);
-    }
-
-    console.log('Migration completed successfully!');
-    console.log('You can now safely clear your localStorage if desired.');
-
-  } catch (error) {
-    console.error('Error during migration:', error);
-    throw error;
-  }
+  for (const student of data.students) await service.saveStudent(student);
+  for (const classItem of data.classes) await service.saveClass(classItem);
+  for (const transaction of data.transactions) await service.saveTransaction(transaction);
+  for (const receipt of data.receipts) await service.saveReceipt(receipt);
+  for (const payment of data.payments) await service.savePayment(payment);
+  for (const invoice of data.invoices) await service.saveInvoice(invoice);
 }
 
 if (typeof window !== 'undefined') {
-  (window as any).migrateToFirebase = migrateLocalStorageToFirebase;
-  console.log('Migration utility loaded. Run "migrateToFirebase()" in the console to migrate your data.');
+  (window as any).migrateToFirebase = async (clubId?: string) => {
+    const savedClub = JSON.parse(localStorage.getItem('currentClub') || 'null');
+    const targetClubId = clubId || savedClub?.id;
+    if (!targetClubId) throw new Error('Selecciona o crea un club antes de migrar los datos.');
+    await migrateLocalStorageToClub(targetClubId);
+  };
 }

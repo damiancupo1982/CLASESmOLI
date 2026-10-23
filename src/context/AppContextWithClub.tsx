@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useReducer, useEffect } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, useState } from 'react';
 import {
   AppState, Student, Class, Payment, Invoice, Transaction,
   User, Receipt, AccountEntry
@@ -405,6 +405,7 @@ const AppContext = createContext<{ state: AppState; dispatch: React.Dispatch<Act
 export function AppProvider({ children, clubId }: { children: React.ReactNode; clubId: string }) {
   const appReducer = createAppReducer(clubId);
   const [state, dispatch] = useReducer(appReducer, initialState);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const firebaseService = createFirebaseServiceWithClub(clubId);
 
   useEffect(() => {
@@ -417,6 +418,7 @@ export function AppProvider({ children, clubId }: { children: React.ReactNode; c
 
     const loadData = async () => {
       try {
+        setLoadError(null);
         const [students, classes, payments, invoices, transactions, receipts, currentUser] = await Promise.all([
           firebaseService.getAllStudents(),
           firebaseService.getAllClasses(),
@@ -473,11 +475,7 @@ export function AppProvider({ children, clubId }: { children: React.ReactNode; c
         console.log('✅ Datos cargados en el estado exitosamente');
       } catch (error) {
         console.error('❌ Error loading data from Firebase:', error);
-        console.error('Detalles:', error);
-        dispatch({
-          type: 'LOAD_DATA',
-          payload: initialState
-        });
+        setLoadError('No se pudieron cargar los datos de este club. La información no fue eliminada; revisá la conexión o restaurá un backup.');
       }
     };
 
@@ -486,6 +484,11 @@ export function AppProvider({ children, clubId }: { children: React.ReactNode; c
 
   return (
     <AppContext.Provider value={{ state, dispatch }}>
+      {loadError && (
+        <div className="mx-auto mt-4 max-w-7xl rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          {loadError}
+        </div>
+      )}
       {children}
     </AppContext.Provider>
   );

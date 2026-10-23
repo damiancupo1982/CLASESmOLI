@@ -42,7 +42,7 @@ export function ClubSelector({ clubs, onSelectClub, onCreateClub, onAdminMode, e
             <Building2 className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-gray-800 mb-2">Sistema de Clases</h1>
-          <p className="text-gray-600">Selecciona un club para comenzar</p>
+          <p className="text-gray-600">tenis2024</p>
         </div>
 
         {!showPasswordInput ? (

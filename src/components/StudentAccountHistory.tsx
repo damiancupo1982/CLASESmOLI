@@ -28,14 +28,29 @@ export function StudentAccountHistory({ student, onClose }: StudentAccountHistor
     });
   };
 
-  const filteredHistory = student.accountHistory?.filter(entry => 
+  const completeHistory = [
+    ...(student.accountHistory || []),
+    ...state.classes
+      .filter(classData => classData.students.includes(student.id))
+      .filter(classData => !(student.accountHistory || []).some(entry => entry.classId === classData.id))
+      .map(classData => ({
+        id: `class-${classData.id}-${student.id}`,
+        date: new Date(classData.date),
+        className: classData.observations || (classData.type === 'individual' ? 'Clase individual' : 'Clase grupal'),
+        classId: classData.id,
+        attendanceStatus: 'Presente' as const,
+        amount: classData.pricePerStudent,
+        createdAt: new Date(classData.createdAt),
+        kind: 'class' as const
+      }))
+  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  const filteredHistory = completeHistory.filter(entry =>
     filterStatus === 'all' || entry.attendanceStatus === filterStatus
-  ) || [];
+  );
 
-  const totalPresent = student.accountHistory?.filter(entry => entry.attendanceStatus === 'Presente').length || 0;
-  const totalAbsent = student.accountHistory?.filter(entry => entry.attendanceStatus === 'Ausente').length || 0;
-  const totalAmount = student.accountHistory?.reduce((sum, entry) => sum + entry.amount, 0) || 0;
-
+  const totalPresent = completeHistory.filter(entry => entry.attendanceStatus === 'Presente').length;
+  const totalAbsent = completeHistory.filter(entry => entry.attendanceStatus === 'Ausente').length;
   const studentTransactions = state.transactions.filter(t => t.studentId === student.id);
   const totalPaid = studentTransactions.filter(t => t.status === 'Pagado').reduce((sum, t) => sum + t.amount, 0);
   const totalPending = studentTransactions.filter(t => t.status === 'Pendiente').reduce((sum, t) => sum + t.amount, 0);
@@ -196,7 +211,7 @@ export function StudentAccountHistory({ student, onClose }: StudentAccountHistor
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              {status === 'all' ? 'Todas' : status}s ({student.accountHistory?.filter(e => status === 'all' || e.attendanceStatus === status).length || 0})
+              {status === 'all' ? 'Todas' : status}s ({completeHistory.filter(e => status === 'all' || e.attendanceStatus === status).length})
             </button>
           ))}
         </div>
@@ -231,7 +246,12 @@ export function StudentAccountHistory({ student, onClose }: StudentAccountHistor
                       return (
                         <tr key={entry.id} className="border-b border-gray-100 hover:bg-gray-50">
                           <td className="py-3 px-4 text-gray-900">{formatDate(entry.date)}</td>
-                          <td className="py-3 px-4 text-gray-900">{entry.className}</td>
+                          <td className="py-3 px-4 text-gray-900">
+                            <div>{entry.className}</div>
+                            {entry.kind === 'class' && (
+                              <div className="text-xs text-gray-500">{studentTransactions.find(t => t.classId === entry.classId)?.status || 'Pendiente de registrar'}</div>
+                            )}
+                          </td>
                           <td className="py-3 px-4">
                             <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
                               entry.attendanceStatus === 'Presente' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'

@@ -137,25 +137,38 @@ function createAppReducer(clubId: string) {
 
       case 'UPDATE_CLASS': {
         const updated = action.payload;
-
-        const updatedClasses = state.classes.map(c =>
-          c.id === updated.id ? updated : c
+        const previous = state.classes.find(c => c.id === updated.id);
+        const previousStudentIds = previous?.students || [];
+        const updatedClasses = state.classes.map(c => c.id === updated.id ? updated : c);
+        const keptStudentIds = new Set(updated.students || []);
+        const existingTransactions = state.transactions.filter(t => t.classId === updated.id);
+        const transactionsToKeep = state.transactions.filter(t => t.classId !== updated.id || keptStudentIds.has(t.studentId));
+        const newTransactions = (updated.students || [])
+          .filter(studentId => !existingTransactions.some(t => t.studentId === studentId))
+          .map(studentId => ({
+            id: generateUUID(),
+            studentId,
+            studentName: state.students.find(s => s.id === studentId)?.name || '',
+            classId: updated.id,
+            className: updated.observations || '',
+            type: 'charge' as const,
+            amount: updated.pricePerStudent,
+            date: new Date(updated.date),
+            description: `Clase ${updated.type}`,
+            status: 'Pendiente' as const
+          }));
+        const updatedTransactions = transactionsToKeep.map(transaction =>
+          transaction.classId === updated.id && transaction.status === 'Pendiente'
+            ? {
+                ...transaction,
+                studentName: state.students.find(s => s.id === transaction.studentId)?.name || transaction.studentName,
+                className: updated.observations || transaction.className,
+                amount: updated.pricePerStudent,
+                date: new Date(updated.date),
+                description: `Clase ${updated.type}`
+              }
+            : transaction
         );
-
-        const updatedTransactions = state.transactions.filter(t => t.classId !== updated.id);
-
-        const newTransactions = (updated.students || []).map(studentId => ({
-          id: generateUUID(),
-          studentId,
-          studentName: state.students.find(s => s.id === studentId)?.name || '',
-          classId: updated.id,
-          className: updated.observations || '',
-          type: 'charge' as const,
-          amount: updated.pricePerStudent,
-          date: new Date(updated.date),
-          description: `Clase ${updated.type}`,
-          status: 'Pendiente' as const
-        }));
 
         newState = {
           ...state,
@@ -164,10 +177,15 @@ function createAppReducer(clubId: string) {
         };
 
         firebaseService.updateClass(updated).catch(console.error);
-        state.transactions.filter(t => t.classId === updated.id).forEach(t =>
-          firebaseService.deleteTransaction(t.id).catch(console.error)
-        );
         newTransactions.forEach(tx => firebaseService.saveTransaction(tx).catch(console.error));
+        if (previousStudentIds.some(studentId => !keptStudentIds.has(studentId))) {
+          state.transactions
+            .filter(t => t.classId === updated.id && !keptStudentIds.has(t.studentId) && t.status === 'Pendiente')
+            .forEach(t => firebaseService.deleteTransaction(t.id).catch(console.error));
+        }
+        updatedTransactions
+          .filter(t => t.classId === updated.id && t.status === 'Pendiente')
+          .forEach(tx => firebaseService.updateTransaction(tx).catch(console.error));
         return newState;
       }
 
@@ -176,12 +194,10 @@ function createAppReducer(clubId: string) {
 
         newState = {
           ...state,
-          classes: state.classes.filter(c => c.id !== cid),
-          transactions: state.transactions.filter(t => t.classId !== cid)
+          classes: state.classes.filter(c => c.id !== cid)
         };
 
         firebaseService.deleteClass(cid).catch(console.error);
-        firebaseService.deleteTransactionsByClassId(cid).catch(console.error);
         return newState;
       }
 
@@ -200,16 +216,11 @@ function createAppReducer(clubId: string) {
           classes: state.classes.filter(cls => {
             const clsDate = new Date(cls.date);
             return !(clsDate.getFullYear() === year && clsDate.getMonth() === month);
-          }),
-          transactions: state.transactions.filter(t => {
-            const classExists = classesToDelete.some(c => c.id === t.classId);
-            return !classExists;
           })
         };
 
         classesToDelete.forEach(cls => {
           firebaseService.deleteClass(cls.id).catch(console.error);
-          firebaseService.deleteTransactionsByClassId(cls.id).catch(console.error);
         });
 
         return newState;
@@ -217,65 +228,50 @@ function createAppReducer(clubId: string) {
 
       case 'RECORD_ATTENDANCE': {
         const { studentId, classId, attendanceStatus, amount, date, className } = action.payload;
-
-        if (attendanceStatus === 'Presente') {
-          const transaction: Transaction = {
-            id: generateUUID(),
-            studentId,
-            studentName: state.students.find(s => s.id === studentId)?.name || '',
-            classId,
-            className,
-            type: 'charge',
-            amount,
-            date: new Date(date),
-            description: `Clase - ${className}`,
-            status: 'Pendiente'
-          };
-
-          newState = {
-            ...state,
-            transactions: [...state.transactions, transaction]
-          };
-        } else {
-          newState = state;
-        }
-
-        const updatedStudents = state.students.map(student => {
-          if (student.id === studentId) {
-            const accountEntry: AccountEntry = {
+        const existingTransaction = state.transactions.find(t => t.classId === classId && t.studentId === studentId);
+        const transaction = attendanceStatus === 'Presente' && !existingTransaction
+          ? {
               id: generateUUID(),
-              date: new Date(date),
-              className,
+              studentId,
+              studentName: state.students.find(s => s.id === studentId)?.name || '',
               classId,
-              attendanceStatus,
-              amount: attendanceStatus === 'Presente' ? amount : 0,
-              createdAt: new Date(),
-              kind: 'class'
-            };
-
-            return {
-              ...student,
-              accountHistory: [...(student.accountHistory || []), accountEntry],
-              currentBalance: student.currentBalance + (attendanceStatus === 'Presente' ? amount : 0)
-            };
-          }
-          return student;
+              className,
+              type: 'charge' as const,
+              amount,
+              date: new Date(date),
+              description: `Clase - ${className}`,
+              status: 'Pendiente' as const
+            }
+          : null;
+        const transactions = transaction ? [...state.transactions, transaction] : state.transactions;
+        const updatedStudents = state.students.map(student => {
+          if (student.id !== studentId) return student;
+          const existingEntry = (student.accountHistory || []).find(entry => entry.classId === classId);
+          const accountEntry: AccountEntry = {
+            id: existingEntry?.id || generateUUID(),
+            date: new Date(date),
+            className,
+            classId,
+            attendanceStatus,
+            amount: attendanceStatus === 'Presente' ? amount : 0,
+            createdAt: existingEntry?.createdAt || new Date(),
+            kind: 'class'
+          };
+          const accountHistory = existingEntry
+            ? student.accountHistory.map(entry => entry.id === existingEntry.id ? accountEntry : entry)
+            : [...(student.accountHistory || []), accountEntry];
+          return {
+            ...student,
+            accountHistory,
+            currentBalance: student.currentBalance + (attendanceStatus === 'Presente' && !existingEntry ? amount : 0)
+          };
         });
 
-        newState = {
-          ...newState,
-          students: updatedStudents
-        };
-
-        updatedStudents.forEach(student => {
-          if (student.id === studentId) {
-            firebaseService.updateStudent(student).catch(console.error);
-          }
-        });
-        if (attendanceStatus === 'Presente' && newState.transactions.length > state.transactions.length) {
-          const newTransaction = newState.transactions[newState.transactions.length - 1];
-          firebaseService.saveTransaction(newTransaction).catch(console.error);
-        }
+        newState = { ...state, transactions, students: updatedStudents };
+        updatedStudents
+          .filter(student => student.id === studentId)
+          .forEach(student => firebaseService.updateStudent(student).catch(console.error));
+        if (transaction) firebaseService.saveTransaction(transaction).catch(console.error);
         return newState;
       }
 
@@ -436,7 +432,30 @@ export function AppProvider({ children, clubId }: { children: React.ReactNode; c
         console.log('  - Clases:', classes?.length || 0);
         console.log('  - Transacciones:', transactions?.length || 0);
 
-        const filteredTransactions = transactions.filter((t: Transaction) => t.amount !== 0 || t.settlementKind === 'discount');
+        const existingKeys = new Set(
+          transactions
+            .filter((transaction: Transaction) => transaction.classId)
+            .map((transaction: Transaction) => `${transaction.classId}:${transaction.studentId}`)
+        );
+        const recoveredTransactions = classes.flatMap(classData =>
+          classData.students
+            .filter(studentId => !existingKeys.has(`${classData.id}:${studentId}`))
+            .map(studentId => ({
+              id: generateUUID(),
+              studentId,
+              studentName: students.find(student => student.id === studentId)?.name || '',
+              classId: classData.id,
+              className: classData.observations || '',
+              type: 'charge' as const,
+              amount: classData.pricePerStudent,
+              date: new Date(classData.date),
+              description: `Clase ${classData.type}`,
+              status: 'Pendiente' as const
+            }))
+        );
+        recoveredTransactions.forEach(transaction => firebaseService.saveTransaction(transaction).catch(console.error));
+        const filteredTransactions = [...transactions, ...recoveredTransactions]
+          .filter((t: Transaction) => t.amount !== 0 || t.settlementKind === 'discount');
 
         dispatch({
           type: 'LOAD_DATA',

@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Search, Percent, BadgeDollarSign, CheckCircle2, ListChecks, Receipt } from 'lucide-react';
+import { Search, Percent, BadgeDollarSign, CheckCircle2, ListChecks, Receipt, MessageCircle } from 'lucide-react';
 import { useApp } from '../context/AppContextWithClub';
 import { formatCurrency } from '../utils/format';
 import { Student, Transaction } from '../types';
@@ -148,6 +148,26 @@ export function BillingModule() {
       setChargeDiscAmount(Math.max(0, Math.min(amt, selectedSubtotal)));
     }
     setPaymentTouched(false);
+  };
+
+  const shareDebtOnWhatsApp = () => {
+    if (!selected || selectedTx.length === 0) return;
+    const student = state.students.find(s => s.id === selected.studentId);
+    const phone = (student?.phone || '').replace(/[^0-9]/g, '');
+    if (!phone) {
+      alert('Este alumno no tiene un teléfono cargado.');
+      return;
+    }
+    const total = selectedTx.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
+    const lines = selectedTx.map(transaction =>
+      `- ${new Date(transaction.date).toLocaleDateString('es-AR')}: ${formatCurrency(Number(transaction.amount || 0))}`
+    );
+    const message = [
+      `Hola ${selected.studentName}, te comparto el detalle de las clases pendientes:`,
+      ...lines,
+      `Total pendiente seleccionado: ${formatCurrency(total)}`
+    ].join('\n');
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
   };
 
   const cobrarSeleccionado = () => {
@@ -536,18 +556,28 @@ export function BillingModule() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between mt-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4">
                   <div className="text-sm text-gray-700">
                     Total seleccionado: <span className="font-semibold">{formatCurrency(selectedSubtotal)}</span>
                   </div>
-                  <button
-                    onClick={cobrarSeleccionado}
-                    disabled={selectedTx.length === 0}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-                  >
-                    <Receipt size={18} />
-                    Cobrar seleccionado y generar recibo
-                  </button>
+                  <div className="flex flex-wrap gap-2 justify-end">
+                    <button
+                      onClick={shareDebtOnWhatsApp}
+                      disabled={selectedTx.length === 0}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+                    >
+                      <MessageCircle size={18} />
+                      Compartir por WhatsApp
+                    </button>
+                    <button
+                      onClick={cobrarSeleccionado}
+                      disabled={selectedTx.length === 0}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      <Receipt size={18} />
+                      Cobrar seleccionado y generar recibo
+                    </button>
+                  </div>
                 </div>
               </>
             )}
